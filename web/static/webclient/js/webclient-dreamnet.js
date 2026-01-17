@@ -64,12 +64,16 @@ function waitNextFrame() {
 }
 
 async function waitForFonts() {
-  if (document.fonts && document.fonts.ready) {
-    try {
-      await document.fonts.load(CONFIG.termFont.size + " " + CONFIG.termFont.face);
-    } catch {
-      // best effort
-    }
+  if (!(document.fonts && document.fonts.load)) return;
+
+  const spec = `${CONFIG.termFont.size} "${CONFIG.termFont.face}"`;
+  console.log("[fonts] load begin", spec);
+  await document.fonts.load(spec);
+  console.log("[fonts] load end", spec);
+
+  // optional best-effort
+  if (document.fonts.ready) {
+    try { await document.fonts.ready; } catch {}
   }
 }
 
@@ -273,9 +277,9 @@ async function start() {
   console.log("[start] begin");
 
   console.log("[start] waitForFonts begin");
+  applyFontConfig();
   await waitForFonts();
   console.log("[start] waitForFonts end");
-  applyFontConfig();
 
   console.log("[start] settle frames begin");
   await waitNextFrame();
@@ -308,62 +312,26 @@ async function start() {
 }
 
 
-/*function main() {
-  const evennia = window["evennia"];
-  if (evennia && evennia.on) {
-    evennia.on("webclientReady", start);
-  } else {
-    void start();
-  }
-}*/
-
 // ---- Entry Point ----
+
 let started = false;
 
-function startOnce(reason) {
+function main() {
   if (started) return;
   started = true;
-  console.log("[startOnce] begin (reason)", reason);
 
-  Promise.resolve()
-    .then(() => start())
-    .then(() => console.log("[startOnce] end"))
-    .catch((err) => console.error("[startOnce] FAILED", err));
-}
-
-function main() {
-  console.log("[main] begin");
-
-  // Always attempt to start from DOM readiness; this is our primary.
-  startOnce("main");
-
-  // If Evennia exists, also hook its event — but do NOT rely on it.
-  const evennia = window["evennia"];
-  if (evennia && typeof evennia.on === "function") {
-    console.log("[main] evennia detected; attaching webclientReady");
-    evennia.on("webclientReady", () => startOnce("evennia:webclientReady"));
-
-    // Critical: if webclientReady already fired before we attached,
-    // this fallback still starts immediately.
-    setTimeout(() => startOnce("evennia:fallbackTimeout0"), 0);
+  const Evennia = window.Evennia;
+  // Optional: log connection state for debugging, but don't gate on it.
+  if (Evennia) {
+    console.log("[terminal] Evennia detected", Object.keys(Evennia));
   } else {
-    console.log("[main] evennia not detected (or no .on); continuing without it");
+    console.warn("[terminal] Evennia not detected (no window.Evennia)");
   }
 
-  console.log("[main] end");
+  // Start DreamNET UI immediately once the script loads.
+  // This does not depend on websocket connection.
+  console.log("[terminal] main; starting DreamNET");
+  start().catch((err) => console.error("[terminal] start FAILED", err));
 }
 
-// Log async failures that might otherwise look like “nothing happened”
-window.addEventListener("unhandledrejection", (e) => {
-  console.error("[unhandledrejection]", e.reason);
-});
-window.addEventListener("error", (e) => {
-  console.error("[window.error]", e.error || e.message);
-});
-
-// Entry point
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => main(), { once: true });
-} else {
-  main();
-}
+main();
