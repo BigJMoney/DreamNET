@@ -1,0 +1,49 @@
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                        ┌──────────────────────────────────────────┐ │
+│                                                                                        │                 Actions >                │ │
+│    Lorem insum dolor sit amet, consectetur adipiscing elit.                            │                                          │ │
+│                                                                                        │                   Msys >                 │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │ Chat                                     │ │
+│                                                                                        │ ──────────────────────────────────────── │ │
+│                                                                                        │ Dude1 hey what's up                      │ │
+│                                                                                        │ You not much man                         │ │
+│    Set dapibus pellentesque ex, eu consectetur enim rutrum posuere. Ut rutrum v        │ Dude1 what ai thought                    │ │
+│    iverra urna vel macumus, Vivamus ut massa tortor, Donec sagittis leo ut.            │                                          │ │
+│                                                                                        │                                          │ │
+│                                                                                        │                                          │ │
+│ Command? >                                                                             │ ──────────────────────────────────────── │ │
+│                                                                                        └──────────────────────────────────────────┘ │
+│                                                                                                                                     │
+  MAGEterm Version bEsT!.69  │                       conn A83K::S25J::N8DD/front                           │  13:35  │  VIRTUAL / LUC  
