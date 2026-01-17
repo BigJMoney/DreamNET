@@ -8,44 +8,16 @@
 
 {% block client %}
 
-<!-- "Main" Content -->
-<div class="app ui-owned">
-  <div class="main-output ui-owned">
-    <div id="messagewindow" class="output-scroll">
-      <div id="messagewindowText" class="term-text"></div>
-    </div>
-
-    <div class="prompt-bar ui-owned">
-      <div id="prompt" class="prompt"></div>
-
-      <div id="inputcontrol" class="input-group ui-owned">
-        <textarea id="inputfield" class="form-control"></textarea>
-        <span class="input-group-btn  ui-owned">
-          <!-- Intentionally omitted from UI; kept for compatibility with stock client JS -->
-          <button id="inputsend" type="button" hidden aria-hidden="true" tabindex="-1"></button>
-        </span>
-      </div>
-
-    </div>
-
+<div id="viewport" class="output-scroll ui-owned">
+  <div id="terminalRoot" class="ui-owned">
+    <pre id="termSurface" class="term-text ui-owned"></pre>
   </div>
-
-  <div class="right-pane ui_owned">
-    <div id="slot-buttons" class="buttons ui_owned">
-      <button class="ui_btn">Actions &gt;</button>
-      <button class="ui_btn">MSys &gt;</button>
-    </div>
-
-    <div class="spacer ui_owned"></div>
-
-    <div id="slot-chat" class="chat-box ui_owned"></div>
-  </div>
-
-  <div id="slot-footer" class="footer"></div>
-
 </div>
 
+<!-- Optional: hidden input capture, *only* if we need it for command entry -->
+<textarea id="inputCapture" class="term-input-capture" autocomplete="off" spellcheck="false"></textarea>
 
 {% endblock %}
+
 {% block scripts %}
 {% endblock %}

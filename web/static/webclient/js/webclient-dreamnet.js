@@ -1,208 +1,369 @@
 /*
  *
- * DreamNET Webclient GUI component
+ * DreamNET Webclient GUI component (framebuffer-first)
  *
  */
 
 console.log("[terminal] script loaded");
 
+const DEV = /[?&]dreamnetDev=1\b/.test(location.search);
+
+
+// ---- Config (dev-time) ----
+// Change these during development; treat as constants during play.
+
+const CONFIG = {
+  termCols: 135,
+  termRows: 49,
+
+  termFont: {
+    face: "ToshibaSat_8x16",
+    size: "16px",
+    lineheight: "16px",
+    spacing: "0px",
+  },
+
+  // Boot screen: set to the 135x49 plain snapshot.
+  bootScreenUrl: "/static/webclient/ui/virtualmode.135x49.txt",
+};
+
+// Set dynamically so that font face has one source of truth
+CONFIG.termFont.family = `"${CONFIG.termFont.face}", monospace`;
+
+
+// ---- Style ----
+
+function applyFontConfig() {
+  const root = document.documentElement;
+  root.style.setProperty("--term-font-family", CONFIG.termFont.family);
+  root.style.setProperty("--term-font-px", CONFIG.termFont.size);
+  root.style.setProperty("--term-font-lineheight", CONFIG.termFont.lineheight);
+  root.style.setProperty("--term-font-letterspacing", CONFIG.termFont.spacing);
+}
+
+
 // ---- State ----
 
-const scrollback = [];
-let termGrid = null;
+let framebufferLines = [];      // string[] length termRows, each length termCols
+let cell = { w: 0, h: 0 };      // measured at k=1 from termSurface styles
+let scaleK = 1;
+
+let renderQueued = false;
 
 
-// ---- Helpers -----
+// ---- Helpers ----
 
-{
-  function waitNextFrame() {
-    const executor = (resolve) => requestAnimationFrame(resolve);
-    return new Promise(executor);
-  }
+function el(id) {
+  const node = document.getElementById(id);
+  if (!node) throw new Error(`[terminal] missing #${id}`);
+  return node;
+}
 
-  async function waitForFonts() {
-    if (document.fonts && document.fonts.ready) {
-      try {
-        await document.fonts.ready;
-      } catch {
-        // best effort
-      }
+function waitNextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+async function waitForFonts() {
+  if (document.fonts && document.fonts.ready) {
+    try {
+      await document.fonts.load(CONFIG.termFont.size + " " + CONFIG.termFont.face);
+    } catch {
+      // best effort
     }
   }
+}
 
-  function measureCellFrom(element) {
-    // Create a hidden measurement element that inherits font metrics
-    const measurer = document.createElement("div");
-    measurer.setAttribute("aria-hidden", "true");
-    measurer.style.position = "absolute";
-    measurer.style.left = "-99999px";
-    measurer.style.top = "0";
-    measurer.style.whiteSpace = "pre";
-    measurer.style.visibility = "hidden";
-    measurer.style.pointerEvents = "none";
+function measureCellFrom(surfaceEl) {
+  const measurer = document.createElement("span");
+  measurer.setAttribute("aria-hidden", "true");
+  measurer.style.position = "absolute";
+  measurer.style.left = "-99999px";
+  measurer.style.top = "0";
+  measurer.style.whiteSpace = "pre";
+  measurer.style.visibility = "hidden";
+  measurer.style.pointerEvents = "none";
 
-    // Inherit font from the terminal area
-    const cs = getComputedStyle(element);
+  surfaceEl.appendChild(measurer);
 
-    // ---- LOGGING ----
-    console.log("[measureCellFrom] computed", {
-      fontFamily: cs.fontFamily,
-      fontSize: cs.fontSize,
-      lineHeight: cs.lineHeight,
-      letterSpacing: cs.letterSpacing,
-    });
+  const N = 200;
+  measurer.textContent = "█".repeat(N);
+  const rectW = measurer.getBoundingClientRect().width;
+  const w = rectW / N;
 
-    measurer.style.fontFamily = cs.fontFamily;
-    measurer.style.fontSize = cs.fontSize;
-    measurer.style.fontWeight = cs.fontWeight;
-    measurer.style.fontStyle = cs.fontStyle;
-    measurer.style.letterSpacing = cs.letterSpacing;
-    measurer.style.lineHeight = cs.lineHeight;
+  measurer.textContent = "█\n".repeat(40);
+  const rectH = measurer.getBoundingClientRect().height;
+  const h = rectH / 40;
 
-    document.body.appendChild(measurer);
+  measurer.remove();
+  return { w, h };
+}
 
-    // Width: average of many glyphs for precision
-    const N = 100;
-    measurer.textContent = "█".repeat(N);
-    const rectW = measurer.getBoundingClientRect().width;
 
-    const ls = parseFloat(cs.letterSpacing) || 0; // "normal" -> NaN -> 0
+function normalizeToGrid(text, cols, rows) {
+  // Normalize newlines, then enforce exact rows and cols.
+  const s = String(text).replace(/\r\n?/g, "\n");
 
-    // width = N*glyph + (N-1)*ls
-    // advancePerChar = glyph + ls = (width + ls) / N
-    const w = rectW / N;
+  // Split into lines; do NOT drop trailing empties (we want exact rows).
+  const raw = s.split("\n");
 
-    // Height: average of many lines for precision
-    measurer.textContent = "█\n█\n█\n█\n█\n█\n█\n█\n█\n█";
-    const h = measurer.getBoundingClientRect().height / 10;
+  // If the export didn’t include trailing spaces, pad to cols.
+  const lines = [];
+  for (let i = 0; i < rows; i++) {
+    const line = raw[i] ?? "";
+    // Preserve leading content; pad/truncate to exact width.
+    lines.push(line.padEnd(cols, " ").slice(0, cols));
+  }
+  return lines;
+}
 
-    measurer.remove();
+function publishTerminalReport(detail) {
+  // Debug hook
+  window.__dreamnetTerm = detail;
 
-    return { charWidth: w, charHeight: h };
+  // Global vars for debugging and future hit-testing / overlays
+  document.documentElement.style.setProperty("--cell-w", `${detail.cellW}px`);
+  document.documentElement.style.setProperty("--cell-h", `${detail.cellH}px`);
+  document.documentElement.style.setProperty("--ui-scale", String(detail.scale));
+
+  window.dispatchEvent(new CustomEvent("dreamnet:termreport", { detail }));
+}
+
+async function fetchText(url) {
+  console.log("[fetch] begin", url);
+  const res = await fetch(url, { cache: "no-store" }); // no-store is nice during dev
+  console.log("[fetch] response", url, res.status, res.statusText);
+
+  if (!res.ok) {
+    throw new Error(`[fetch] failed ${res.status} ${res.statusText} for ${url}`);
   }
 
-  function computeTerminalGrid(viewport, textElForMetrics) {
-    const { charWidth, charHeight } = measureCellFrom(textElForMetrics);
+  const text = await res.text();
+  console.log("[fetch] read text", url, { chars: text.length });
+  return text;
+}
 
-    // clientWidth/Height = usable interior space
-    const viewportWidth  = viewport.clientWidth;
-    const viewportHeight = viewport.clientHeight;
 
-    const cols = Math.max(1, Math.floor(viewportWidth  / charWidth));
-    const rows = Math.max(1, Math.floor(viewportHeight / charHeight));
+// ---- Scaling ----
 
-    // ---- LOGGING ----
-    console.log("[terminal metrics]");
-    console.log("  char size:", {
-      width:  +charWidth.toFixed(4),
-      height: +charHeight.toFixed(4),
-    });
-    console.log("  viewport size:", {
-      width:  viewportWidth,
-      height: viewportHeight,
-    });
-    console.log("  grid:", {
-      cols,
-      rows,
-    });
+function computeScale(viewportW, viewportH, termPxW, termPxH) {
+  // Largest integer k >= 1 that fits, else 1 (and we rely on scrolling).
+  const kx = Math.floor(viewportW / termPxW);
+  const ky = Math.floor(viewportH / termPxH);
+  return Math.max(1, Math.min(kx, ky));
+}
 
-    return {
-      cols,
-      rows,
-      charWidth,
-      charHeight,
-      viewportWidth,
-      viewportHeight,
-    };
+function applyScale(k) {
+  const viewport = el("viewport");
+  const root = el("terminalRoot");
+
+  // Native terminal pixel size at k=1.
+  const termPxW = CONFIG.termCols * cell.w;
+  const termPxH = CONFIG.termRows * cell.h;
+
+  // Set layout size so scrollbars represent scaled content accurately.
+  const scaledW = Math.ceil(termPxW * k);
+  const scaledH = Math.ceil(termPxH * k);
+  root.style.width = `${scaledW}px`;
+  root.style.height = `${scaledH}px`;
+
+  // Apply visual scale (integer only).
+  root.style.transform = `scale(${k})`;
+  // IMPORTANT: after scaling, the *layout size* above is already scaled, so we must
+  // "undo" layout scaling by sizing at k and scaling root back to 1? No:
+  // We’re using transform scale, so layout size stays unscaled. Setting width/height
+  // to scaled values makes scrolling match. This is what we want.
+
+  // (Optional) helpful debug attrs
+  viewport.dataset.scale = String(k);
+
+  scaleK = k;
+
+  publishTerminalReport({
+    grid: { cols: CONFIG.termCols, rows: CONFIG.termRows },
+    cellW: cell.w,
+    cellH: cell.h,
+    scale: k,
+    termPxW,
+    termPxH,
+    scaledPxW: scaledW,
+    scaledPxH: scaledH,
+    viewportW: viewport.clientWidth,
+    viewportH: viewport.clientHeight,
+  });
+}
+
+function recomputeScale() {
+  const viewport = el("viewport");
+
+  const termPxW = CONFIG.termCols * cell.w;
+  const termPxH = CONFIG.termRows * cell.h;
+
+  const k = computeScale(viewport.clientWidth, viewport.clientHeight, termPxW, termPxH);
+  if (k !== scaleK) {
+    console.log("[scale] k", scaleK, "->", k);
   }
+  applyScale(k);
+}
 
 
-  // ---- Rendering ----
+// ---- Rendering ----
 
-  function renderSlice() {
-    if (!termGrid) return;
+function renderFramebuffer() {
+  const surface = el("termSurface");
+  surface.textContent = framebufferLines.join("\n");
+}
 
-    const { cols, rows } = termGrid;
-    // slice scrollback → DOM
+function requestRender(reason) {
+  console.log("[render] request", reason);
+  if (renderQueued) return;
+  renderQueued = true;
 
-  }
-
-
-  // ---- Wiring -----
-
-  function publishTerminalReport(viewport, grid) {
-    // Debug / inspection
-    window.__dreamnetTerm = grid;
-
-    // Optional: data attributes for overlay debugging
-    viewport.dataset.cols = String(grid.cols);
-    viewport.dataset.rows = String(grid.rows);
-
-    // Global snap metrics
-    document.documentElement.style.setProperty("--cell-w", `${grid.charWidth}px`);
-    document.documentElement.style.setProperty("--cell-h", `${grid.charHeight}px`);
-
-    // Notify renderer(s)
-    window.dispatchEvent(new CustomEvent("dreamnet:termreport", { detail: grid }));
-  }
-
-  function initTerminalMetrics() {
-    const viewport = document.getElementById("messagewindow");
-    if (!viewport) return;
-
-    const textEl = document.getElementById("messagewindowText") || viewport;
-
-    const grid = computeTerminalGrid(viewport, textEl);
-    publishTerminalReport(viewport, grid);
-  }
-
-  function setupResizeHandling() {
-    let timer = null;
-    window.addEventListener("resize", () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(initTerminalMetrics, 80);
-    });
-  }
-
-  // Event Hooks
-  window.addEventListener("dreamnet:termreport", (ev) => {
-    console.log("term resize:", ev.detail.cols, ev.detail.rows);
+  requestAnimationFrame(() => {
+    console.log("[render] rAF paint begin (scheduled by)", reason);
+    renderQueued = false;
+    renderFramebuffer();
+    console.log("[render] rAF paint end");
   });
 
-  window.addEventListener("dreamnet:termreport", (ev) => {
-    termGrid = ev.detail;
-    renderSlice();
+  console.log("[render] scheduled rAF; end of call stack for", reason);
+}
+
+
+// ---- Boot screen loader ----
+
+async function loadBootScreenText() {
+  if (!CONFIG.bootScreenUrl) {
+    // fallback: blank screen
+    console.log("[boot] no bootScreenUrl; using blank framebuffer");
+    return Array(CONFIG.termRows).fill("").join("\n");
+  }
+
+  try {
+    const text = await fetchText(CONFIG.bootScreenUrl);
+    console.log("[boot] loaded boot screen");
+    return text;
+  } catch (err) {
+    console.warn("[boot] failed to load boot screen; using fallback", err);
+    const header = `BOOT SCREEN LOAD FAILED`;
+    return Array.from({ length: CONFIG.termRows }, (_, y) =>
+      (y === 0 ? header : "").padEnd(CONFIG.termCols, " ").slice(0, CONFIG.termCols)
+    ).join("\n");
+  }
+}
+
+
+// ---- Wiring ----
+
+function setupResizeHandling() {
+  let timer = null;
+  window.addEventListener("resize", () => {
+    // Resize only recomputes scale; does not touch cols/rows.
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      recomputeScale();
+      requestRender("resize");
+    }, 50);
+  });
+}
+
+
+// ---- Startup ----
+
+async function start() {
+  console.log("[start] begin");
+
+  console.log("[start] waitForFonts begin");
+  await waitForFonts();
+  console.log("[start] waitForFonts end");
+  applyFontConfig();
+
+  console.log("[start] settle frames begin");
+  await waitNextFrame();
+  await waitNextFrame();
+  console.log("[start] settle frames end");
+
+  console.log("[start] measure cell begin");
+  cell = measureCellFrom(el("termSurface"));
+  console.log("[start] measure cell end", cell);
+
+  console.log("[start] load boot screen begin");
+  const bootText = await loadBootScreenText();
+  console.log("[start] load boot screen end");
+
+  console.log("[start] normalize framebuffer begin");
+  framebufferLines = normalizeToGrid(bootText, CONFIG.termCols, CONFIG.termRows);
+  console.log("[start] normalize framebuffer end", {
+    rows: framebufferLines.length,
+    cols: framebufferLines[0]?.length ?? 0,
   });
 
+  console.log("[start] initial scale+render begin");
+  recomputeScale();
+  requestRender("boot");
+  console.log("[start] initial scale+render end");
 
-  // ---- Startup Orchestration -----
+  setupResizeHandling();
 
-  async function start() {
-    await waitForFonts();
-    // Let layout settle (Grid + scrollbars + font swap)
-    await waitNextFrame();
-    await waitNextFrame();
-
-    initTerminalMetrics();
-    setupResizeHandling();
-  }
-
-  function main() {
-    const evennia = window["evennia"];
-
-    if (evennia && evennia.on) {
-      evennia.on("webclientReady", start);
-    } else {
-      void start();
-    }
-  }
+  console.log("[start] end");
+}
 
 
-  // ---- Entry Point -----
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", main, { once: true });
+/*function main() {
+  const evennia = window["evennia"];
+  if (evennia && evennia.on) {
+    evennia.on("webclientReady", start);
   } else {
-    main();
+    void start();
   }
+}*/
+
+// ---- Entry Point ----
+let started = false;
+
+function startOnce(reason) {
+  if (started) return;
+  started = true;
+  console.log("[startOnce] begin (reason)", reason);
+
+  Promise.resolve()
+    .then(() => start())
+    .then(() => console.log("[startOnce] end"))
+    .catch((err) => console.error("[startOnce] FAILED", err));
+}
+
+function main() {
+  console.log("[main] begin");
+
+  // Always attempt to start from DOM readiness; this is our primary.
+  startOnce("main");
+
+  // If Evennia exists, also hook its event — but do NOT rely on it.
+  const evennia = window["evennia"];
+  if (evennia && typeof evennia.on === "function") {
+    console.log("[main] evennia detected; attaching webclientReady");
+    evennia.on("webclientReady", () => startOnce("evennia:webclientReady"));
+
+    // Critical: if webclientReady already fired before we attached,
+    // this fallback still starts immediately.
+    setTimeout(() => startOnce("evennia:fallbackTimeout0"), 0);
+  } else {
+    console.log("[main] evennia not detected (or no .on); continuing without it");
+  }
+
+  console.log("[main] end");
+}
+
+// Log async failures that might otherwise look like “nothing happened”
+window.addEventListener("unhandledrejection", (e) => {
+  console.error("[unhandledrejection]", e.reason);
+});
+window.addEventListener("error", (e) => {
+  console.error("[window.error]", e.error || e.message);
+});
+
+// Entry point
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => main(), { once: true });
+} else {
+  main();
 }
