@@ -102,23 +102,21 @@ function measureCellFrom(surfaceEl) {
   return { w, h };
 }
 
+function normalizeNewlines(text) {
+  return String(text).replace(/\r\n?/g, "\n");
+}
 
-function normalizeToGrid(text, cols, rows) {
-  // Normalize newlines, then enforce exact rows and cols.
-  const s = String(text).replace(/\r\n?/g, "\n");
-
-  // Split into lines; do NOT drop trailing empties (we want exact rows).
+function coerceToGridLines(text, cols, rows) {
+  const s = normalizeNewlines(text);
   const raw = s.split("\n");
 
-  // If the export didn’t include trailing spaces, pad to cols.
-  const lines = [];
-  for (let i = 0; i < rows; i++) {
-    const line = raw[i] ?? "";
-    // Preserve leading content; pad/truncate to exact width.
-    lines.push(line.padEnd(cols, " ").slice(0, cols));
+  const out = [];
+  for (let y = 0; y < rows; y++) {
+    out.push((raw[y] ?? "").padEnd(cols, " ").slice(0, cols));
   }
-  return lines;
+  return out;
 }
+
 
 function publishTerminalReport(detail) {
   // Debug hook
@@ -219,7 +217,7 @@ function renderFramebuffer() {
 
 function requestRender(reason) {
   console.log("[render] request", reason);
-  if (renderQueued) return;
+  if (renderQueued) return; // Coalesce render into a consistent one per frame
   renderQueued = true;
 
   requestAnimationFrame(() => {
@@ -294,9 +292,9 @@ async function start() {
   const bootText = await loadBootScreenText();
   console.log("[start] load boot screen end");
 
-  console.log("[start] normalize framebuffer begin");
-  framebufferLines = normalizeToGrid(bootText, CONFIG.termCols, CONFIG.termRows);
-  console.log("[start] normalize framebuffer end", {
+  console.log("[start] build framebuffer begin");
+  framebufferLines = coerceToGridLines(bootText, CONFIG.termCols, CONFIG.termRows);
+  console.log("[start] build framebuffer end", {
     rows: framebufferLines.length,
     cols: framebufferLines[0]?.length ?? 0,
   });
@@ -317,7 +315,10 @@ async function start() {
 let started = false;
 
 function main() {
-  if (started) return;
+  if (started) {
+    console.warn("[terminal] Subsequent startups attempted");
+    return;
+  }
   started = true;
 
   const Evennia = window.Evennia;
