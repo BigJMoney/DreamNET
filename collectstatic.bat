@@ -33,4 +33,4 @@ if defined _OLD_CODEPAGE (
     set _OLD_CODEPAGE=
 )
 
-evennia collectstatic
+evennia collectstatic --no-input
