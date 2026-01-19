@@ -26,10 +26,18 @@ const CONFIG = {
   // Boot screen: set to the 135x49 plain snapshot.
   bootScreenUrl: "/static/webclient/ui/virtualmode.135x49.txt",
   devBootScreenUrlBase: "/static/webclient/ui/rainbow_sgr_per_char_135x49_shift",
+
+  // Frame pacing (Model B: update+render lockstep).
+  // 0 = uncapped: frames run only when requested (scheduled via rAF).
+  // >0 = fixed FPS: frames run at most at this cadence, but the loop STOPS when idle.
+  devFps: 10,
 };
 
 // Set dynamically so that font face has one source of truth
 CONFIG.termFont.family = `"${CONFIG.termFont.face}", monospace`;
+
+
+// ---- CP437 enforcement ----
 
 // CP437 byte->Unicode table (256 code points)
 const CP437_UNICODE = [
@@ -73,8 +81,6 @@ function applyFontConfig() {
 let framebuffer = null;          // Cell[][] length termRows x termCols
 let cell = { w: 0, h: 0 };       // measured at k=1 from termSurface styles
 let scaleK = 1;
-
-let renderQueued = false;
 
 
 // ---- Helpers ----
@@ -166,18 +172,6 @@ function clearFramebuffer(fb) {
   }
 }
 
-// Apply pen to a character; if inverse is set, swap fg/bg at write time (MVP).
-function makeCellFromPen(ch, pen) {
-  let fg = pen.fg;
-  let bg = pen.bg;
-  if (pen.flags & F_INVERSE) {
-    const t = fg;
-    fg = bg;
-    bg = t;
-  }
-  return makeCell(ch, fg, bg, pen.flags);
-}
-
 function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, n));
 }
@@ -221,7 +215,6 @@ function applySgrCodes(pen, codes) {
 }
 
 function isCp437Char(ch) {
-
   // (fine for BMP; non-BMP would come as surrogate halves and fail -> replaced)
   return CP437_CODEPOINTS.has(ch.codePointAt(0));
 }
@@ -298,6 +291,7 @@ function writeAnsiSgrToRect(fb, text, x0, y0, w, h) {
     if (x < rw && y < rh) {
       const gx = rx0 + x;
       const gy = ry0 + y;
+
       // Write in-place to avoid allocating new objects per char.
       // (We still compute fg/bg swap if inverse is set.)
       let fg = pen.fg;
@@ -307,6 +301,7 @@ function writeAnsiSgrToRect(fb, text, x0, y0, w, h) {
         fg = bg;
         bg = t;
       }
+
       const cell = fb[gy][gx];
 
       // Determine output glyph + per-cell flags
@@ -327,7 +322,7 @@ function writeAnsiSgrToRect(fb, text, x0, y0, w, h) {
 
     x++;
     // Autowrap at end of line unless there's already a newline char in the next cel
-    if (x >= rw && s[i + 1] !== '\n') {
+    if (x >= rw && s[i + 1] !== "\n") {
       x = 0;
       y++;
       if (y >= rh) break;
@@ -452,10 +447,6 @@ function applyScale(k) {
 
   // Apply visual scale (integer only).
   root.style.transform = `scale(${k})`;
-  // IMPORTANT: after scaling, the *layout size* above is already scaled, so we must
-  // "undo" layout scaling by sizing at k and scaling root back to 1? No:
-  // We’re using transform scale, so layout size stays unscaled. Setting width/height
-  // to scaled values makes scrolling match. This is what we want.
 
   // (Optional) helpful debug attrs
   viewport.dataset.scale = String(k);
@@ -497,20 +488,215 @@ function renderFramebuffer() {
   surface.innerHTML = renderFramebufferToHtml(framebuffer);
 }
 
-function requestRender(reason) {
-  console.log("[render] request", reason);
-  if (renderQueued) return; // Coalesce render into a consistent one per frame
-  renderQueued = true;
 
-  requestAnimationFrame(() => {
-    console.log("[render] rAF paint begin (scheduled by)", reason);
-    renderQueued = false;
+// ---- Terminal Engine ----
+//
+// A "frame" = apply staged work to framebuffer + render once.
+// No framebuffer mutation outside TerminalEngine._runOneFrame().
+//
+
+class TerminalEngine {
+  constructor(opts) {
+    this.cols = opts.cols;
+    this.rows = opts.rows;
+    this.dev = !!opts.dev;
+
+    this.fps = (this.dev ? (opts.devFps | 0) : 0) | 0; // 0 = event-driven
+
+    this.running = false;
+    this.pending = false;
+    this.timerId = null;
+    this.lastReason = "";
+
+    // Work queue (consumed only inside _runOneFrame)
+    this.work = {
+      fullScreenText: null,   // string | null
+      needsScale: false,
+      perf: {
+        active: false,
+        screens: [],
+        idx: 0,
+        loopsLeft: 0,
+      },
+    };
+  }
+
+  requestFrame(reason) {
+    this.pending = true;
+    if (reason) this.lastReason = reason;
+
+    console.log("[frame] request", reason);
+
+    if (!this.running) {
+      console.log("[frame] start loop (first request)", reason);
+      this.running = true;
+      this._scheduleNextTick();
+      return;
+    }
+
+    // Event-driven mode: schedule an rAF tick now.
+    if (this.fps <= 0) {
+      this._scheduleNextTick();
+    }
+  }
+
+  stageScale(reason) {
+    this.work.needsScale = true;
+    this.requestFrame(reason || "scale");
+  }
+
+  stageFullScreenText(text, reason) {
+    this.work.fullScreenText = text;
+    this.requestFrame(reason || "fullScreenText");
+  }
+
+  startPerfTest(screens, loops, reason) {
+    if (!Array.isArray(screens) || screens.length === 0) {
+      console.warn("[dev] perf test: no screens; abort");
+      return;
+    }
+
+    this.work.perf.active = true;
+    this.work.perf.screens = screens;
+    this.work.perf.idx = 0;
+    this.work.perf.loopsLeft = loops | 0;
+
+    console.log("[dev] perf test begin", {
+      screens: screens.length,
+      loops: this.work.perf.loopsLeft,
+      fps: this.fps,
+    });
+
+    this.requestFrame(reason || "perf test start");
+  }
+
+  stopPerfTest(reason) {
+    console.log("[dev] perf test stop", reason || "");
+    this.work.perf.active = false;
+    this.work.perf.screens = [];
+    this.work.perf.idx = 0;
+    this.work.perf.loopsLeft = 0;
+  }
+
+  hasPendingWork() {
+    return (
+      this.pending ||
+      this.work.needsScale ||
+      this.work.fullScreenText !== null ||
+      this.work.perf.active
+    );
+  }
+
+  _scheduleNextTick() {
+    if (!this.running) return;
+
+    // IMPORTANT: in capped mode, the loop STOPS when idle.
+    if (!this.hasPendingWork()) {
+      console.log("[frame] idle; stop loop");
+      this.running = false;
+      this.pending = false;
+      if (this.timerId) {
+        clearTimeout(this.timerId);
+        this.timerId = null;
+      }
+      return;
+    }
+
+    const fps = this.fps | 0;
+
+    if (fps <= 0) {
+      requestAnimationFrame(() => this._tick());
+      return;
+    }
+
+    const delay = Math.max(0, Math.floor(1000 / fps));
+    this.timerId = setTimeout(() => this._tick(), delay);
+  }
+
+  _tick() {
+    if (!this.running) return;
+
+    // If there is no work anymore (possible if a request was canceled), stop.
+    if (!this.hasPendingWork()) {
+      this._scheduleNextTick();
+      return;
+    }
+
+    // Only run a frame if:
+    //  - a frame was explicitly requested, or
+    //  - perf is actively animating (one screen per frame).
+    const shouldRunFrame =
+      this.pending ||
+      this.work.perf.active;
+
+    if (!shouldRunFrame) {
+      this._scheduleNextTick();
+      return;
+    }
+
+    this.pending = false;
+
+    const reason = this.lastReason || "";
+    this.lastReason = "";
+
+    console.log("[frame] begin", reason);
+
+    this._runOneFrame();
+
+    console.log("[frame] end");
+
+    this._scheduleNextTick();
+  }
+
+  _runOneFrame() {
+    // 1) Apply any scale recompute (does not mutate framebuffer, but must precede render)
+    if (this.work.needsScale) {
+      console.log("[frame] apply scale recompute");
+      this.work.needsScale = false;
+      recomputeScale();
+    }
+
+    // 2) Apply staged full-screen text (boot, explicit screens, etc.)
+    if (this.work.fullScreenText !== null) {
+      console.log("[frame] apply fullScreenText");
+      const text = this.work.fullScreenText;
+      this.work.fullScreenText = null;
+
+      clearFramebuffer(framebuffer);
+      writeAnsiSgrToRect(framebuffer, text, 0, 0, this.cols, this.rows);
+    }
+
+    // 3) Perf stepping: exactly one screen per frame (lockstep)
+    if (this.work.perf.active) {
+      const p = this.work.perf;
+
+      if (!p.screens.length || p.loopsLeft <= 0) {
+        console.log("[dev] perf test finished");
+        this.stopPerfTest("finished");
+      } else {
+        const s = p.screens[p.idx];
+
+        // IMPORTANT: framebuffer mutation happens only here (inside frame loop).
+        writeAnsiSgrToRect(framebuffer, s, 0, 0, this.cols, this.rows);
+
+        p.idx++;
+        if (p.idx >= p.screens.length) {
+          p.idx = 0;
+          p.loopsLeft--;
+        }
+
+        // Keep the loop alive for the next frame.
+        this.pending = true;
+        this.lastReason = "perf tick";
+      }
+    }
+
+    // 4) Render exactly once per frame
     renderFramebuffer();
-    console.log("[render] rAF paint end");
-  });
-
-  console.log("[render] scheduled rAF; end of call stack for", reason);
+  }
 }
+
+let term = null;
 
 
 // ---- Boot screen loader ----
@@ -541,31 +727,19 @@ async function loadBootScreenText() {
 async function loadPerfTestScreens() {
   let testloop = [];
   if (DEV) {
-    for (let i = 0; i <= 9; i++) {
+    for (let i = 1; i <= 9; i++) {
       try {
         const text = await fetchText(`${CONFIG.devBootScreenUrlBase}0${i}.ans`);
         console.log("[dev] loaded test screen", i);
-        testloop.push(text)
+        testloop.push(text);
       } catch (err) {
         console.warn("[dev] failed to load test screen", err);
-        return
+        return null;
       }
     }
-    return testloop
+    return testloop;
   }
-}
-
-// Load a sequence of screens and render them on an animation loop
-function runPerfTest(testloop) {
-  let x = 0
-  while (x < 5) {
-    for (let s of testloop) {
-      // Don't clear the framebuffer (for now)
-      writeAnsiSgrToRect(framebuffer, s, 0, 0, CONFIG.termCols, CONFIG.termRows);
-      requestRender("perf test loop");
-    }
-    x++
-  }
+  return null;
 }
 
 
@@ -577,8 +751,7 @@ function setupResizeHandling() {
     // Resize only recomputes scale; does not touch cols/rows.
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
-      recomputeScale();
-      requestRender("resize");
+      term.stageScale("resize");
     }, 50);
   });
 }
@@ -607,30 +780,36 @@ async function initializeTerminal() {
   framebuffer = makeFramebuffer(CONFIG.termCols, CONFIG.termRows);
   console.log("[start] init framebuffer end");
 
+  console.log("[start] init engine begin");
+  term = new TerminalEngine({
+    cols: CONFIG.termCols,
+    rows: CONFIG.termRows,
+    dev: DEV,
+    devFps: CONFIG.devFps,
+  });
+  console.log("[start] init engine end");
+
   console.log("[start] load boot screen begin");
   const bootText = await loadBootScreenText();
   console.log("[start] load boot screen end");
 
-  console.log("[start] paint boot screen begin");
-  clearFramebuffer(framebuffer);
-  // Full-screen write (MVP). Later, region writers will target rects.
-  writeAnsiSgrToRect(framebuffer, bootText, 0, 0, CONFIG.termCols, CONFIG.termRows);
-  console.log("[start] paint boot screen end");
-
-  console.log("[start] initial scale+render begin");
-  recomputeScale();
-  requestRender("boot");
-  console.log("[start] initial scale+render end");
+  console.log("[start] stage boot paint begin");
+  term.stageScale("boot scale");
+  term.stageFullScreenText(bootText, "boot paint");
+  console.log("[start] stage boot paint end");
 
   setupResizeHandling();
 
   console.log("[start] end");
 
   if (DEV) {
-    console.log("[dev] paint boot screen begin");
+    console.log("[dev] load perf test screens begin");
     const testloop = await loadPerfTestScreens();
-    console.log("[dev] paint boot screen begin");
-    runPerfTest(testloop);
+    console.log("[dev] load perf test screens end");
+    if (testloop) {
+      // loops = 5 (same as before), one screen per frame
+      term.startPerfTest(testloop, 20, "perf test start");
+    }
   }
 }
 
