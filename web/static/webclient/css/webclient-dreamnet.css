@@ -8,8 +8,35 @@
 /* --- Constants --- */
 
 :root {
-  --term-fg: #aaaaaa;
-  --term-bg: #0b0f14;
+  --term-fg: #c0c0c0;     /* terminal dim white (gray) */
+  --term-bg: #0b0f14;     /* terminal glass black */
+
+  --c0:  var(--term-bg);
+  --c1:  #800000;         /* red */
+  --c2:  #008000;         /* green */
+  --c3:  #808000;         /* yellow */
+  --c4:  #000080;         /* blue */
+  --c5:  #800080;         /* magenta */
+  --c6:  #008080;         /* cyan */
+  --c7:  var(--term-fg);
+
+  --c8:  #555555;         /* bright black / gray */
+  --c9:  #ff5555;
+  --c10: #55ff55;
+  --c11: #ffff55;
+  --c12: #5555ff;
+  --c13: #ff55ff;
+  --c14: #55ffff;
+  --c15: #ffffff;
+}
+
+:root[data-theme="amber"] {
+  --term-fg: #ffb000;
+  --term-bg: #120a00;
+}
+
+@keyframes termBlink {
+  50% { opacity: 0; }
 }
 
 @font-face {
@@ -41,6 +68,33 @@ html, body {
   height: 100%;
   margin: 0;
 }
+
+/* Blink class */
+.blink {
+  animation: termBlink 1s steps(1, end) infinite;
+}
+
+/* Foreground classes */
+.fg0  { color: var(--c0);  } .fg1  { color: var(--c1);  }
+.fg2  { color: var(--c2);  } .fg3  { color: var(--c3);  }
+.fg4  { color: var(--c4);  } .fg5  { color: var(--c5);  }
+.fg6  { color: var(--c6);  } .fg7  { color: var(--c7);  }
+.fg8  { color: var(--c8);  } .fg9  { color: var(--c9);  }
+.fg10 { color: var(--c10); } .fg11 { color: var(--c11); }
+.fg12 { color: var(--c12); } .fg13 { color: var(--c13); }
+.fg14 { color: var(--c14); } .fg15 { color: var(--c15); }
+
+/* Background classes */
+.bg0  { background-color: var(--c0);  } .bg1  { background-color: var(--c1);  }
+.bg2  { background-color: var(--c2);  } .bg3  { background-color: var(--c3);  }
+.bg4  { background-color: var(--c4);  } .bg5  { background-color: var(--c5);  }
+.bg6  { background-color: var(--c6);  } .bg7  { background-color: var(--c7);  }
+.bg8  { background-color: var(--c8);  } .bg9  { background-color: var(--c9);  }
+.bg10 { background-color: var(--c10); } .bg11 { background-color: var(--c11); }
+.bg12 { background-color: var(--c12); } .bg13 { background-color: var(--c13); }
+.bg14 { background-color: var(--c14); } .bg15 { background-color: var(--c15); }
+
+.b { font-weight: 700; }
 
 #viewport {
   height: 100vh;
