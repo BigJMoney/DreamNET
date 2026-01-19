@@ -25,6 +25,7 @@ const CONFIG = {
 
   // Boot screen: set to the 135x49 plain snapshot.
   bootScreenUrl: "/static/webclient/ui/virtualmode.135x49.txt",
+  devBootScreenUrlBase: "/static/webclient/ui/rainbow_sgr_per_char_135x49_shift",
 };
 
 // Set dynamically so that font face has one source of truth
@@ -535,6 +536,39 @@ async function loadBootScreenText() {
 }
 
 
+// ---- Dev ----
+
+async function loadPerfTestScreens() {
+  let testloop = [];
+  if (DEV) {
+    for (let i = 0; i <= 9; i++) {
+      try {
+        const text = await fetchText(`${CONFIG.devBootScreenUrlBase}0${i}.ans`);
+        console.log("[dev] loaded test screen", i);
+        testloop.push(text)
+      } catch (err) {
+        console.warn("[dev] failed to load test screen", err);
+        return
+      }
+    }
+    return testloop
+  }
+}
+
+// Load a sequence of screens and render them on an animation loop
+function runPerfTest(testloop) {
+  let x = 0
+  while (x < 5) {
+    for (let s of testloop) {
+      // Don't clear the framebuffer (for now)
+      writeAnsiSgrToRect(framebuffer, s, 0, 0, CONFIG.termCols, CONFIG.termRows);
+      requestRender("perf test loop");
+    }
+    x++
+  }
+}
+
+
 // ---- Wiring ----
 
 function setupResizeHandling() {
@@ -591,6 +625,13 @@ async function initializeTerminal() {
   setupResizeHandling();
 
   console.log("[start] end");
+
+  if (DEV) {
+    console.log("[dev] paint boot screen begin");
+    const testloop = await loadPerfTestScreens();
+    console.log("[dev] paint boot screen begin");
+    runPerfTest(testloop);
+  }
 }
 
 
