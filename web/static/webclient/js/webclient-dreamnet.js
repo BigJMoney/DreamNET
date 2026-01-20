@@ -730,7 +730,7 @@ async function loadBootScreenText() {
 async function loadPerfTestScreens() {
   let testloop = [];
   if (DEV) {
-    for (let i = 1; i <= 9; i++) {
+    for (let i = 0; i <= 9; i++) {
       try {
         const text = await fetchText(`${CONFIG.devBootScreenUrlBase}0${i}.ans`);
         console.log("[dev] loaded test screen", i);
