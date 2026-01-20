@@ -80,7 +80,7 @@ function applyFontConfig() {
 
 let framebuffer = null;          // Cell[][] length termRows x termCols
 let cell = { w: 0, h: 0 };       // measured at k=1 from termSurface styles
-let scaleK = 1;
+let scaleK = 0;                   //todo: move to ui module
 
 
 // ---- Helpers ----
@@ -479,8 +479,8 @@ function recomputeScale() {
   const k = computeScale(viewport.clientWidth, viewport.clientHeight, termPxW, termPxH);
   if (k !== scaleK) {
     console.log("[scale] k", scaleK, "->", k);
+    applyScale(k);
   }
-  applyScale(k);
 }
 
 
