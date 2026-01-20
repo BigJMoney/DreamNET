@@ -433,20 +433,23 @@ function computeScale(viewportW, viewportH, termPxW, termPxH) {
 
 function applyScale(k) {
   const viewport = el("viewport");
-  const root = el("terminalRoot");
+  const root = el("terminalRoot");     // layout box (scroll size)
+  const surface = el("termSurface");   // visual surface (scaled)
 
   // Native terminal pixel size at k=1.
   const termPxW = CONFIG.termCols * cell.w;
   const termPxH = CONFIG.termRows * cell.h;
 
-  // Set layout size so scrollbars represent scaled content accurately.
-  const scaledW = Math.ceil(termPxW * k);
-  const scaledH = Math.ceil(termPxH * k);
+  // Layout size reflects scaled content for accurate scrollbars/clipping.
+  const scaledW = termPxW * k;
+  const scaledH = termPxH * k;
   root.style.width = `${scaledW}px`;
   root.style.height = `${scaledH}px`;
 
-  // Apply visual scale (integer only).
-  root.style.transform = `scale(${k})`;
+  // The surface stays at native size; apply integer scaling visually.
+  surface.style.width = `${termPxW}px`;
+  surface.style.height = `${termPxH}px`;
+  surface.style.transform = `scale(${k})`;
 
   // (Optional) helpful debug attrs
   viewport.dataset.scale = String(k);
