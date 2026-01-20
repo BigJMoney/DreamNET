@@ -139,5 +139,5 @@ html, body {
   /* prevent browser “helpfulness” */
   font-kerning: none;
   font-variant-ligatures: none;
-  text-rendering: geometricPrecision;   /* Disable if perf issues */
+  /*text-rendering: geometricPrecision;   /* Try enabling if glyph rendering issues */
 }
