@@ -25,12 +25,12 @@ const CONFIG = {
 
   // Boot screen: set to the 135x49 plain snapshot.
   bootScreenUrl: "/static/webclient/ui/virtualmode.135x49.txt",
-  devBootScreenUrlBase: "/static/webclient/ui/rainbow_sgr_per_char_135x49_shift",
+  devBootScreenUrlBase: "/static/webclient/ui/sgr_blocks10_shift_with_page_135x49_shift",
 
   // Frame pacing (Model B: update+render lockstep).
   // 0 = uncapped: frames run only when requested (scheduled via rAF).
   // >0 = fixed FPS: frames run at most at this cadence, but the loop STOPS when idle.
-  devFps: 10,
+  devFps: 20,
 };
 
 // Set dynamically so that font face has one source of truth
@@ -321,7 +321,7 @@ function writeAnsiSgrToRect(fb, text, x0, y0, w, h) {
     }
 
     x++;
-    // Autowrap at end of line unless there's already a newline char in the next cel
+    // Autowrap at end of line unless there's already a newline char in the next input char
     if (x >= rw && s[i + 1] !== "\n") {
       x = 0;
       y++;
@@ -500,197 +500,243 @@ function renderFramebuffer() {
 
 class TerminalEngine {
   constructor(opts) {
-    this.cols = opts.cols;
-    this.rows = opts.rows;
+    this.cols = CONFIG.termCols;
+    this.rows = CONFIG.termRows;
     this.dev = !!opts.dev;
 
     this.fps = (this.dev ? (opts.devFps | 0) : 0) | 0; // 0 = event-driven
+    this.frameInterval = this.fps > 0 ? (1000 / this.fps) : 0;
+    this.nextFrameDue = null;
+    this.rafScheduled = false;
 
     this.running = false;
-    this.pending = false;
     this.timerId = null;
-    this.lastReason = "";
 
     // Work queue (consumed only inside _runOneFrame)
     this.work = {
-      fullScreenText: null,   // string | null
-      needsScale: false,
+      commands: [],
+      reason: "",
       perf: {
         active: false,
+        startTime: 0,
         screens: [],
         idx: 0,
+        frameCount: 0,
         loopsLeft: 0,
       },
     };
   }
 
-  requestFrame(reason) {
-    this.pending = true;
-    if (reason) this.lastReason = reason;
+
+  /**
+   * Entry point for requesting a new terminal frame.
+   *
+   * @param {"scale"|"fullScreenText"} type - The type of rendering job to run
+   * @param {string} reason - String that will be printed in log along with the render
+   * @param {object} payload - Job specific data, when needed (defaults to null)
+   */
+  stageJob(type, reason = "", payload = null) {
+
+    const cmd = payload ? { type, ...payload } : { type };
+    this.work.commands.push(cmd);
+
+    this.work.reason = (reason || type)
+
+    // wake the frame loop
+    this.requestFrame();
+  }
+
+  _resetEngineLoop() {
+    this.nextFrameDue = null;
+    this.rafScheduled = false;
+    if (this.timerId) {
+      clearTimeout(this.timerId);
+      this.timerId = null;
+    }
+  }
+
+  /**
+   * Only needed for the current commit (will remove soon on refactor)
+   */
+  requestFrame() {
+    const reason = this.work.reason || "";
+    this.work.reason = "";
 
     console.log("[frame] request", reason);
 
     if (!this.running) {
       console.log("[frame] start loop (first request)", reason);
+      this._resetEngineLoop();
       this.running = true;
       this._scheduleNextTick();
-      return;
-    }
-
-    // Event-driven mode: schedule an rAF tick now.
-    if (this.fps <= 0) {
-      this._scheduleNextTick();
     }
   }
 
-  stageScale(reason) {
-    this.work.needsScale = true;
-    this.requestFrame(reason || "scale");
-  }
-
-  stageFullScreenText(text, reason) {
-    this.work.fullScreenText = text;
-    this.requestFrame(reason || "fullScreenText");
+  _resetPerfState() {
+    const p = this.work.perf;
+    p.active = false;
+    p.startTime = 0;
+    p.screens = [];
+    p.idx = 0;
+    p.frameCount = 0;
+    p.loopsLeft = 0;
   }
 
   startPerfTest(screens, loops, reason) {
+    if (this.work.perf.active) return;
     if (!Array.isArray(screens) || screens.length === 0) {
       console.warn("[dev] perf test: no screens; abort");
       return;
     }
 
+    this._resetPerfState();
+
+    this.work.reason = (reason || "perf test start");
     this.work.perf.active = true;
     this.work.perf.screens = screens;
-    this.work.perf.idx = 0;
     this.work.perf.loopsLeft = loops | 0;
+    this.work.perf.startTime = performance.now();
 
-    console.log("[dev] perf test begin", {
+    console.log("[dev] perf test started", {
       screens: screens.length,
       loops: this.work.perf.loopsLeft,
       fps: this.fps,
     });
 
-    this.requestFrame(reason || "perf test start");
+    this.requestFrame();
   }
 
-  stopPerfTest(reason) {
-    console.log("[dev] perf test stop", reason || "");
-    this.work.perf.active = false;
-    this.work.perf.screens = [];
-    this.work.perf.idx = 0;
-    this.work.perf.loopsLeft = 0;
+  stopPerfTest() {
+    if(!this.work.perf.active) return;
+
+    const end = performance.now();
+    const durationMs = end - this.work.perf.startTime;
+    const durationS = Math.max(1e-6, durationMs / 1000);
+    const avgFps = this.work.perf.frameCount / durationS
+
+    console.log(
+      `[perf] test finished — ${durationS.toFixed(3)}s, ${this.work.perf.frameCount} frames (Avg Fps ${avgFps.toFixed(2)})`
+    );
+
+    this._resetPerfState();
   }
 
   hasPendingWork() {
     return (
-      this.pending ||
-      this.work.needsScale ||
-      this.work.fullScreenText !== null ||
+      this.work.commands.length > 0 ||
       this.work.perf.active
     );
   }
 
+  /**
+   * Handles when engine ticks fire
+   * @private
+   */
   _scheduleNextTick() {
     if (!this.running) return;
 
-    // IMPORTANT: in capped mode, the loop STOPS when idle.
+    // Stop the scheduler loop when there are no jobs (idle state)
     if (!this.hasPendingWork()) {
       console.log("[frame] idle; stop loop");
       this.running = false;
-      this.pending = false;
-      if (this.timerId) {
-        clearTimeout(this.timerId);
-        this.timerId = null;
-      }
+      this._resetEngineLoop()
       return;
     }
 
-    const fps = this.fps | 0;
 
-    if (fps <= 0) {
+    // Uncapped fps path (when fps = 0)
+    if (this.fps <= 0) {
+      // Prevents accumulation of rAF calls
+      if (this.rafScheduled) return;
+      this.rafScheduled = true;
       requestAnimationFrame(() => this._tick());
       return;
     }
 
-    const delay = Math.max(0, Math.floor(1000 / fps));
-    this.timerId = setTimeout(() => this._tick(), delay);
+    // Capped fps path
+    if (this.timerId) return;
+
+    // Initialize nextDue once (on loop start)
+    const now = performance.now();
+    if (this.nextFrameDue == null) this.nextFrameDue = now;
+
+    // Catch up in cadence when needed
+    if (this.nextFrameDue < now) {
+      // jump forward by the number of intervals we missed, plus one
+      const missed = Math.floor((now - this.nextFrameDue) / this.frameInterval) + 1;
+      this.nextFrameDue += missed * this.frameInterval;
+    }
+    const delay = this.nextFrameDue - now;
+
+    this.timerId = setTimeout(() => {
+      this.timerId = null;
+      this._tick();
+    }, delay);
   }
 
+  /**
+   *
+   * @private
+   */
   _tick() {
     if (!this.running) return;
 
-    // If there is no work anymore (possible if a request was canceled), stop.
-    if (!this.hasPendingWork()) {
-      this._scheduleNextTick();
-      return;
-    }
-
-    // Only run a frame if:
-    //  - a frame was explicitly requested, or
-    //  - perf is actively animating (one screen per frame).
-    const shouldRunFrame =
-      this.pending ||
-      this.work.perf.active;
-
-    if (!shouldRunFrame) {
-      this._scheduleNextTick();
-      return;
-    }
-
-    this.pending = false;
-
-    const reason = this.lastReason || "";
-    this.lastReason = "";
-
-    console.log("[frame] begin", reason);
+    // We are now handling the scheduled callback.
+    this.rafScheduled = false;
 
     this._runOneFrame();
-
-    console.log("[frame] end");
+    // Plan the next tick if we're capped
+    if (this.fps > 0) {
+      this.nextFrameDue += this.frameInterval;
+    }
 
     this._scheduleNextTick();
   }
 
   _runOneFrame() {
-    // 1) Apply any scale recompute (does not mutate framebuffer, but must precede render)
-    if (this.work.needsScale) {
-      console.log("[frame] apply scale recompute");
-      this.work.needsScale = false;
-      recomputeScale();
+    // Drain commands staged since last frame. Swap-and-clear.
+    const commands = this.work.commands;
+    this.work.commands = [];
+
+    // 1) Apply all one-shot commands in a predictable order (the order they were queued).
+    //    No framebuffer mutation happens outside this function.
+    for (const cmd of commands) {
+      if (cmd.type === "scale") {
+        console.log("[frame] apply scale recompute");
+        recomputeScale();
+        continue;
+      }
+
+      if (cmd.type === "fullScreenText") {
+        console.log("[frame] apply fullScreenText");
+
+        clearFramebuffer(framebuffer);
+        writeAnsiSgrToRect(framebuffer, cmd.text, 0, 0, this.cols, this.rows);
+        continue;
+      }
+
+      console.warn("[frame] unknown command", cmd);
     }
 
-    // 2) Apply staged full-screen text (boot, explicit screens, etc.)
-    if (this.work.fullScreenText !== null) {
-      console.log("[frame] apply fullScreenText");
-      const text = this.work.fullScreenText;
-      this.work.fullScreenText = null;
-
-      clearFramebuffer(framebuffer);
-      writeAnsiSgrToRect(framebuffer, text, 0, 0, this.cols, this.rows);
-    }
-
-    // 3) Perf stepping: exactly one screen per frame (lockstep)
+    // 2) Perf stepping: exactly one screen per frame (lockstep)
     if (this.work.perf.active) {
       const p = this.work.perf;
 
       if (!p.screens.length || p.loopsLeft <= 0) {
         console.log("[dev] perf test finished");
-        this.stopPerfTest("finished");
+        this.stopPerfTest();
       } else {
         const s = p.screens[p.idx];
 
         // IMPORTANT: framebuffer mutation happens only here (inside frame loop).
         writeAnsiSgrToRect(framebuffer, s, 0, 0, this.cols, this.rows);
+        this.work.perf.frameCount++;
 
         p.idx++;
         if (p.idx >= p.screens.length) {
           p.idx = 0;
           p.loopsLeft--;
         }
-
-        // Keep the loop alive for the next frame.
-        this.pending = true;
-        this.lastReason = "perf tick";
       }
     }
 
@@ -754,7 +800,7 @@ function setupResizeHandling() {
     // Resize only recomputes scale; does not touch cols/rows.
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
-      term.stageScale("resize");
+      term.stageJob("scale", "resize", null);
     }, 50);
   });
 }
@@ -785,8 +831,6 @@ async function initializeTerminal() {
 
   console.log("[start] init engine begin");
   term = new TerminalEngine({
-    cols: CONFIG.termCols,
-    rows: CONFIG.termRows,
     dev: DEV,
     devFps: CONFIG.devFps,
   });
@@ -797,8 +841,8 @@ async function initializeTerminal() {
   console.log("[start] load boot screen end");
 
   console.log("[start] stage boot paint begin");
-  term.stageScale("boot scale");
-  term.stageFullScreenText(bootText, "boot paint");
+  term.stageJob("scale", "boot scale", null);
+  term.stageJob("fullScreenText", "boot paint", { text: bootText});
   console.log("[start] stage boot paint end");
 
   setupResizeHandling();
