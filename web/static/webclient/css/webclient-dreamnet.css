@@ -113,11 +113,15 @@ html, body {
 
 /* This is what we scale */
 #terminalRoot {
-  transform-origin: top left;
+  position: relative;
 }
 
 /* The actual text surface */
 #termSurface {
+  position: absolute;
+  transform-origin: top left;
+  top: 0;
+  left: 0;
   color: var(--term-fg);
   background: var(--term-bg);
 
