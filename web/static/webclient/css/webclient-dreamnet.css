@@ -63,6 +63,15 @@
   font-display: block;
 }
 
+/* Good for testing scaling; 8x8 */
+@font-face {
+  font-family: "ApricotPortable";
+  src: url("../fonts/ApricotPortable.woff") format("woff");
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
 /* Fill the page; make the viewport the scroll container */
 html, body {
   height: 100%;
