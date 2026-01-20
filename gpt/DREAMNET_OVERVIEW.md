@@ -65,6 +65,18 @@ This keeps DreamNET usable as:
 
 > When in doubt, docs win over chat memory.
 
+### 2.4 Post–Dev Task documentation review
+
+After completing each Dev Task, a brief documentation review is performed to determine whether markdown updates are required.
+
+This review explicitly records:
+- which documents were checked
+- whether changes were made
+
+A “no changes required” outcome is valid and should be noted.
+
+This ritual exists to ensure that markdown documents remain the authoritative record of project state as refactors and feature work progress.
+
 ---
 
 ## 3. Coding and review preferences

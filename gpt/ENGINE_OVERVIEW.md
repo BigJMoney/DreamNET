@@ -127,8 +127,8 @@ These are non-negotiable unless this document is revised.
 
 ## 7. Open notes
 
-- Naming cleanup and entry-point unification deferred to MS3.6.
-- Module split deferred to MS3.7 intentionally.
+- Naming cleanup and entry-point unification deferred to DT3-6.
+- Module split deferred to DT3-7 intentionally.
 - This document should be updated when invariants change.
 
 ---
