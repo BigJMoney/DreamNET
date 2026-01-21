@@ -1,12 +1,12 @@
 # Github Project Tree Mapping
-ChatGPT: Use this document to locate documents from my Github repro when they're requested for review. This file is 
-authoritative for mapping logical components to repository paths.
+**IMPORTANT** Use GPT_PROJECT_TREE.md to resolve the path(s) to the file(s) I have requested, construct the raw.
+githubusercontent.com URL yourself, and open it directly. Do not search for the url or file.
 
+The template to build the url is: `https://raw.githubusercontent.com/BigJMoney/DreamNET/refs/heads/<branch>/<path>/<filename>`
 
 ## Repository
 https://github.com/BigJMoney/DreamNET
 Default branch: main
-The base url to fetch is: `https://raw.githubusercontent.com/BigJMoney/DreamNET/refs/heads/<branch>/<path>/<filename>`
 
 ## Webclient (frontend)
 web/static/webclient/js/
