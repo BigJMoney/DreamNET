@@ -24,7 +24,7 @@ const CONFIG = {
   },
 
   // Boot screen: set to the 135x49 plain snapshot.
-  bootScreenUrl: "/static/webclient/ui/virtualmode.135x49.txt",
+  bootScreenUrl: "/static/webclient/ui/virtualmode.135x49.utf8ans",
   devBootScreenUrlBase: "/static/webclient/ui/sgr_blocks10_shift_with_page_135x49_shift",
 
   // Frame pacing (Model B: update+render lockstep).
@@ -262,6 +262,11 @@ function writeAnsiSgrToRect(fb, text, x0, y0, w, h) {
       let params = "";
       while (j < s.length) {
         const cj = s[j];
+        if (params.length > 16) {
+          console.warn("[write ANSI] Malformed CSI SGR code:", params);
+          i = j-1; // advance as cleanly as possible
+          continue;
+        }
         if (cj === "m") break;
 
         // Basic guard: only accept digits/semicolons for SGR
@@ -286,6 +291,13 @@ function writeAnsiSgrToRect(fb, text, x0, y0, w, h) {
 
     // Ignore char if NUL or control
     if (ch < " " || ch === "\x7f") continue;
+
+    // Line wrap happens after non-printables are accounted for but before writing characters
+    if (x >= rw) {
+      x = 0;
+      y++;
+      if (y >= rh) break;
+    }
 
     // Write printable char
     if (x < rw && y < rh) {
@@ -321,12 +333,6 @@ function writeAnsiSgrToRect(fb, text, x0, y0, w, h) {
     }
 
     x++;
-    // Autowrap at end of line unless there's already a newline char in the next input char
-    if (x >= rw && s[i + 1] !== "\n") {
-      x = 0;
-      y++;
-      if (y >= rh) break;
-    }
   }
 }
 
