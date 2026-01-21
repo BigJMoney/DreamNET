@@ -17,7 +17,7 @@
   --c3:  #808000;         /* yellow */
   --c4:  #000080;         /* blue */
   --c5:  #800080;         /* magenta */
-  --c6:  #008080;         /* cyan */
+  --c6:  #00aaaa;         /* cyan */
   --c7:  var(--term-fg);
 
   --c8:  #555555;         /* bright black / gray */
