@@ -8,7 +8,7 @@ Dev Task numbering is project-global and does not correspond directly to Feature
 loosely chronological and may skip or group numbers as planning evolves.
 
 For a higher level view of feature work that informs future planning of this structure, see ROADMAP.md in Github 
-dreamnet/docs. 
+under /docs. 
 
 ## Current Track - Terminal-Based Webclient UI [A1]
 For more details, see GPT_ENGINE_OVERVIEW.md and GPT_ENGINE_LIFECYCLE.md. In A1 most work is oriented toward setting 

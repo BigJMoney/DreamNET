@@ -8,7 +8,7 @@ This document captures context for the DreamNET project:
 Engine behavior, invariants, and technical contracts are documented elsewhere. This file exists to reduce context 
 loss across time, tools, and collaborators.
 
-All docs are stored in this project's Github page at (https://github.com/BigJMoney/DreamNET) in dreamnet/docs. 
+All docs are stored in this project's Github page at (https://github.com/BigJMoney/DreamNET) in /docs. 
 Markdown docs for the Chat GPT Project are 
 prefixed with GPT_*, and will be kept up to date in both the GPT project and Github. 
 
