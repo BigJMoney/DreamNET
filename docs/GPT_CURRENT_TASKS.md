@@ -70,10 +70,36 @@ Output writer abstraction.
 ### DT 5 — Evennia I/O
 Evennia input/output integration.
 
-### DT 6 — Runtime config fetch
+### DT 6: Input await buffer with idle-gated flush (one per idle)
+
+#### Goal
+Add a client-side **input await buffer** so submitted player commands are sent to Evennia **only when the terminal 
+engine becomes idle**, storing **exactly one command per idle** and flushing afterward.
+
+#### Behavior
+- The engine will need a new event for when it starts up, to alert input systems enter a limited input ode and begin 
+  listening for the idle event
+- The user can type normally at first.
+- When the user presses **Enter / Submit**:
+  1. The submitted line is enqueued into `pendingInput` buffer that only holds one command.
+  2. If the system is *still listening for the next `engine:idle` event* (i.e., the command cannot be flushed 
+     immediately), then the prompt becomes **locked for input** Typing will be disabled and the prompt grayed out.
+- On each `engine:idle` event:
+  - If `pendingInput` is non-empty, dequeue the command and send it.
+  - Unlock the prompt for new input
+  - Return to normal input mode (no input limit, no buffer storage)
+
+#### Notes / Constraints
+- Submit locking happens **after** a command is entered, and **only** while awaiting an idle-triggered flush 
+  (limited input mode)
+- This task is scoped to buffering + idle-based flush + submit lock only; do not couple it to animation logic.
+- Any changes needed in the engine should be limited to exposing a reliable `engine:idle` and `engine:start` signal (if 
+  not already present).
+
+### DT 7 — Runtime config fetch
 Load tunables dynamically without dirtying git.
 
-### DT 7 — Render string-build optimization
+### DT 8 — Render string-build optimization
 Replace O(n²) string concatenation with array accumulation + join.
 
 ---

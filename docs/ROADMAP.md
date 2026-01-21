@@ -50,3 +50,4 @@ Planned features are those that are currently believed to be **very likely** to 
 - Architechs [A1]
 - PROGs [A1]
 - Webclient Combat UI [A3] ("BRAIN mode")
+- Animation Driver [A2] (builders)

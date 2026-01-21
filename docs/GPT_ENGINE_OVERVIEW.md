@@ -57,8 +57,8 @@ These are non-negotiable unless this document is revised.
 
 ### 2.6 FPS policy
 - `fps` is immutable after construction.
-- `fps = 0` → event-driven (rAF only when requested).
-- `fps > 0` → capped cadence using deadline-based scheduling.
+- `fps = 0` → event-driven (rAF only when requested). Only permitted  dev and testing.
+- `fps > 0` → capped cadence using deadline-based scheduling. Shipped builds always have a cap (authoritative mode)
 - Being exactly on-time (`nextFrameDue === now`) runs immediately.
 - No artificial frame skipping.
 
@@ -66,14 +66,28 @@ These are non-negotiable unless this document is revised.
 
 ## 3. Engine execution model (CURRENT)
 
-### 3.1 Entry points
-- `stageJob(type, reason, payload)` is the primary public entry.
-- `requestFrame()` still exists but is considered **legacy** and will be removed later.
-- Long-term target: **stageJob is the only wake mechanism**.
+### 3.1 Entry points (Public API)
+- `requestFrame(frameRequest, reason)` will be the **only** public entry point.
+- `stageJob(...)` is being removed as part of the DT 3.6 refactor.
+- A frame request represents **exactly one frame**: apply work to framebuffer + render once.
+- Each call to `requestFrame` requests **exactly one frame**. A frame consists of:
+  - applying framebuffer mutations
+  - rendering exactly once
+- The payload is required for every call, even if it contains no patches.
+- The engine does not expose any other wake, staging, or scheduling mechanisms.
+
+#### 3.1.1 Frame request shape (CURRENT TARGET)
+- The engine operates exclusively on **frames**, not jobs.
+- A frame request is expressed as one or more **rectangular patches**. Each patch specifies:
+  - position (`x`, `y`)
+  - size (`w`, `h`)
+  - content (`text`)
+- A full-screen update is represented as a patch covering the entire terminal grid.
+- There is no command-type switching inside the engine. Rectangular patching is the universal primitive.
 
 ### 3.2 Loop lifecycle
 - Idle → no timers, no rAF, `running=false`
-- First staged job:
+- First requested frame:
   - resets scheduler state
   - marks engine as running
   - schedules first tick
@@ -89,6 +103,13 @@ These are non-negotiable unless this document is revised.
   - `nextFrameDue` deadline tracking
   - catch-up only when late
   - never schedule more than one timer
+
+### 3.4 Engine events (CURRENT TARGET)
+The engine emits minimal lifecycle signals for external coordination:
+- `frame:complete` — emitted after a frame is rendered
+- `engine:idle` — emitted when the scheduler stops due to no pending work
+
+These events were chosen as an alternative to a Promise-based coordination solution, and enable reactive drivers.
 
 ---
 
@@ -107,11 +128,14 @@ These are non-negotiable unless this document is revised.
 ## 5. Perf harness (CURRENT)
 
 - Perf is currently embedded in the engine as a temporary driver.
-- One framebuffer update per frame.
-- Perf state is explicitly reset before start and after stop.
-- Perf lifecycle is clean and isolated.
 
-> This will be generalized into a driver abstraction.
+> This will be removed from the engine and replaced with an external **animation driver**.
+
+### 5.1 Driver direction (CURRENT TARGET)
+- Drivers do not own timing; they are paced by engine frames.
+- Drivers request work by calling `requestFrame(...)`.
+- The first driver is an **AnimationDriver** 
+- It will initially support a 'commit resolve' mode only; i.e. it will not cache any frames before the animation plays
 
 ---
 

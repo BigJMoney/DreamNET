@@ -8,15 +8,7 @@ This document captures context for the DreamNET project:
 Engine behavior, invariants, and technical contracts are documented elsewhere. This file exists to reduce context 
 loss across time, tools, and collaborators.
 
-All docs are stored in this project's Github page at (https://github.com/BigJMoney/DreamNET) in /docs. 
-Markdown docs for the Chat GPT Project are 
-prefixed with GPT_*, and will be kept up to date in both the GPT project and Github. 
-
 ---
-
-## 0. **Critical information**
-- When asked to access files from this project's Gitgub repository, see GPT_PROJECT_TREE.md for authoritative 
-  instructions.
 
 ## 1. Project context
 
@@ -53,6 +45,13 @@ This keeps DreamNET usable as:
   - multiple times per dev task
   - between checklist items
 - Dev Tasks are *planning artifacts*, not version-control events.
+
+### 2.2 Feature tracks (planned)
+Some work is grouped into feature tracks to avoid prematurely expanding scope.
+
+Example:
+- **Animations A1**: engine refactor + driver plumbing + reactive scheduling
+- **Animations A2**: animation authoring (builders/scripts), resolve modes, and policy decisions
 
 ---
 
@@ -143,6 +142,7 @@ If something runs, it should be:
 - Point out real issues directly.
 - Avoid speculative “what if” changes that violate stated constraints.
 - Respect decisions once they are locked and documented.
+- Always respond with standalone .md snippets when asked to provide an update to an .md document in the project folder
 
 ---
 
