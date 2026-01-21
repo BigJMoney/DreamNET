@@ -28,7 +28,11 @@ This dev task establishes a **safe rollback baseline**.
 
 ---
 
-### DT 3.6 — Engine refactor dev task (NEXT)
+### DT 3.5.5 — More perf content (NEXT)
+
+Goal: Add more perf content so that future tasks are easier to test.
+
+### DT 3.6 — Engine refactor dev task
 
 Goal: simplify and clarify the engine without changing behavior.
 
