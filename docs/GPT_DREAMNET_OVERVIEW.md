@@ -5,9 +5,11 @@ This document captures context for the DreamNET project:
 - project-level goals
 - working conventions and preferences
 
-Engine behavior, invariants, and technical contracts are documented elsewhere. This file exists to reduce context loss across time, tools, and collaborators.
+Engine behavior, invariants, and technical contracts are documented elsewhere. This file exists to reduce context 
+loss across time, tools, and collaborators.
 
-All docs are stored in this project's Github page at (...) in dreamnet/docs. Markdown docs for the Chat GPT Project are 
+All docs are stored in this project's Github page at (https://github.com/BigJMoney/DreamNET) in dreamnet/docs. 
+Markdown docs for the Chat GPT Project are 
 prefixed with GPT_*, and will be kept up to date in both the GPT project and Github. 
 
 ---
@@ -68,7 +70,8 @@ This keeps DreamNET usable as:
 
 ### 2.4 Post–Dev Task documentation review
 
-After completing each Dev Task, a brief documentation review is performed to determine whether markdown updates are required.
+After completing each Dev Task, a brief documentation review is performed to determine whether markdown updates are 
+required.
 
 This review explicitly records:
 - which documents were checked
@@ -76,7 +79,8 @@ This review explicitly records:
 
 A “no changes required” outcome is valid and should be noted.
 
-This ritual exists to ensure that markdown documents remain the authoritative record of project state as refactors and feature work progress.
+This ritual exists to ensure that markdown documents remain the authoritative record of project state as refactors 
+and feature work progress.
 
 ---
 
@@ -146,7 +150,8 @@ Out of scope for this document:
 - framebuffer rules
 - scaling contracts
 
-The above are specific items that belong in engine-specific documentation, but the principle applies to any area of specific feature design and implementation.
+The above are specific items that belong in engine-specific documentation, but the principle applies to any area of 
+specific feature design and implementation.
 
 ---
 
