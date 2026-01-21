@@ -14,6 +14,10 @@ prefixed with GPT_*, and will be kept up to date in both the GPT project and Git
 
 ---
 
+## 0. **Critical information**
+- When asked to access files from this project's Gitgub repository, see GPT_PROJECT_TREE.md for authoritative 
+  instructions.
+
 ## 1. Project context
 
 ### 1.1 DreamNET + Evennia relationship
