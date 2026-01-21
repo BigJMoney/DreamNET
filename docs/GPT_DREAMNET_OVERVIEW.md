@@ -5,9 +5,10 @@ This document captures context for the DreamNET project:
 - project-level goals
 - working conventions and preferences
 
-Engine behavior, invariants, and technical contracts are documented elsewhere
+Engine behavior, invariants, and technical contracts are documented elsewhere. This file exists to reduce context loss across time, tools, and collaborators.
 
-This file exists to reduce context loss across time, tools, and collaborators.
+All docs are stored in this project's Github page at (...) in dreamnet/docs. Markdown docs for the Chat GPT Project are 
+prefixed with GPT_*, and will be kept up to date in both the GPT project and Github. 
 
 ---
 

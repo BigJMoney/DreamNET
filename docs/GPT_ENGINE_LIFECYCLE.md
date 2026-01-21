@@ -58,7 +58,7 @@ The engine is considered to have pending work if **any** of the following are tr
 - a temporary driver (e.g. perf harness) indicates more work is required
 - other explicit engine-owned queues exist (if applicable)
 
-> **DT3-6 update point:** redefine “pending work” precisely once the engine API and driver abstraction are finalized.
+> **DT 3.6 update point:** redefine “pending work” precisely once the engine API and driver abstraction are finalized.
 
 ---
 
@@ -105,7 +105,7 @@ Expected logging:
 - `[frame] wake: <reason>`
 - `[sched] schedule first tick: <mode>`
 
-> **DT3-6 update point:** document the single blessed wake API once legacy entrypoints are removed or consolidated.
+> **DT 3.6 update point:** document the single blessed wake API once legacy entrypoints are removed or consolidated.
 
 ---
 
@@ -152,7 +152,8 @@ Requirements:
 
 Legacy mechanisms may exist temporarily but are not considered part of the long-term contract.
 
-> **DT3-6 update point:** remove or formally deprecate legacy wake paths (e.g. `requestFrame()`), and update this section accordingly.
+> **DT 3.6 update point:** remove or formally deprecate legacy wake paths (e.g. `requestFrame()`), and update this 
+> section accordingly.
 
 ---
 
@@ -189,7 +190,7 @@ Refactors must preserve or improve trace clarity.
 
 ## Living document note
 
-This document must be reviewed and updated after **DT3-6** completes to ensure:
+This document must be reviewed and updated after **DT 3.6** completes to ensure:
 
 - terminology matches the refactored API
 - wake mechanisms are accurate
