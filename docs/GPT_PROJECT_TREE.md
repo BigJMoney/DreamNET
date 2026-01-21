@@ -1,5 +1,7 @@
 # Github Project Tree Mapping
-ChatGPT: Use this document to locate documents from my Github repro when they're requested for review. 
+ChatGPT: Use this document to locate documents from my Github repro when they're requested for review. This file is 
+authoritative for mapping logical components to repository paths.
+
 
 ## Repository
 https://github.com/BigJMoney/DreamNET
