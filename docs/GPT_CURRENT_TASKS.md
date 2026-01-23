@@ -61,6 +61,7 @@ Expected splits:
 - UI scaling + reporting
 - engine core
 - boot / startup wiring
+- investigate optimization: uncapped framebuffer construction (html write still capped)
 
 ---
 
@@ -99,7 +100,12 @@ engine becomes idle**, storing **exactly one command per idle** and flushing aft
 ### DT 7 — Runtime config fetch
 Load tunables dynamically without dirtying git.
 
+### DT 8 - Look into ANSI font codes
+Codes to change font family (required invariant: all fonts must be the same calculated size)
+
 ### DT 8 — Render string-build optimization
 Replace O(n²) string concatenation with array accumulation + join.
+
+### DT 9 - Center the terminal in the viewport
 
 ---
