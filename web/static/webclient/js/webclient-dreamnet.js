@@ -24,7 +24,7 @@ const CONFIG = {
   },
 
   // Boot screen: set to the 135x49 plain snapshot.
-  bootScreenUrl: "/static/webclient/ui/virtualmode.135x49.utf8ans",
+  bootScreenUrl: "/static/webclient/ui/virtual_mode04.ans",
   devBootScreenUrlBase: "/static/webclient/ui/sgr_blocks10_shift_with_page_135x49_shift",
 
   // Frame pacing (Model B: update+render lockstep).
