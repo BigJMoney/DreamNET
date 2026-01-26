@@ -3,39 +3,9 @@
  * DreamNET Webclient GUI component (framebuffer-first)
  *
  */
+import { DEV, CONFIG, applyFontConfig } from "./config.js";
 
 console.log("[terminal] script loaded");
-
-const DEV = /[?&]dreamnetDev=1\b/.test(location.search);
-
-
-// ---- Config (dev-time) ----
-// Change these during development; treat as constants during play.
-
-const CONFIG = {
-  termCols: 135,
-  termRows: 49,
-
-  termFont: {
-    face: "ToshibaSat_8x16",
-    size: "16px",
-    lineheight: "16px",
-    spacing: "0px",
-  },
-
-  // Boot screen: set to the 135x49 plain snapshot.
-  bootScreenUrl: "/static/webclient/ui/virtual_mode04.ans",
-  devBootScreenUrlBase: "/static/webclient/ui/sgr_blocks10_shift_with_page_135x49_shift",
-
-  // Frame pacing (Model B: update+render lockstep).
-  // 0 = uncapped: frames run only when requested (scheduled via rAF).
-  // >0 = fixed FPS: frames run at most at this cadence, but the loop STOPS when idle.
-  devFps: 20,
-};
-
-// Set dynamically so that font face has one source of truth
-CONFIG.termFont.family = `"${CONFIG.termFont.face}", monospace`;
-
 
 // ---- CP437 enforcement ----
 
@@ -63,18 +33,6 @@ const CP437_CODEPOINTS = new Set(CP437_UNICODE);
 
 // Use a CP437-safe placeholder. '■' (U+25A0) is CP437 byte 0xFE.
 const CP437_MISSING = "■";
-
-
-// ---- Style ----
-
-function applyFontConfig() {
-  const root = document.documentElement;
-  root.style.setProperty("--term-font-family", CONFIG.termFont.family);
-  root.style.setProperty("--term-font-px", CONFIG.termFont.size);
-  root.style.setProperty("--term-font-lineheight", CONFIG.termFont.lineheight);
-  root.style.setProperty("--term-font-letterspacing", CONFIG.termFont.spacing);
-}
-
 
 // ---- State ----
 
