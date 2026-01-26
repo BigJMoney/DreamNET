@@ -43,7 +43,7 @@ Checklist:
 - Decide fate of `shouldRunFrame`
 - Extract perf into a generic driver abstraction
 - Revisit `_tick` vs `_runOneFrame`
-- Remove `requestFrame()` once drivers exist
+- Remove `stageJob()` once drivers exist
 - Remove scaling from the engine (UI-only)
 
 ---
