@@ -67,8 +67,7 @@ These are non-negotiable unless this document is revised.
 ## 3. Engine execution model (CURRENT)
 
 ### 3.1 Entry points (Public API)
-- `requestFrame(frameRequest, reason)` will be the **only** public entry point.
-- `stageJob(...)` is being removed as part of the DT 3.6 refactor.
+- `requestFrame(frameRequest, reason)` is the **only** public entry point.
 - A frame request represents **exactly one frame**: apply work to framebuffer + render once.
 - Each call to `requestFrame` requests **exactly one frame**. A frame consists of:
   - applying framebuffer mutations
@@ -76,7 +75,7 @@ These are non-negotiable unless this document is revised.
 - The payload is required for every call, even if it contains no patches.
 - The engine does not expose any other wake, staging, or scheduling mechanisms.
 
-#### 3.1.1 Frame request shape (CURRENT TARGET)
+#### 3.1.1 Frame request shape
 - The engine operates exclusively on **frames**, not jobs.
 - A frame request is expressed as one or more **rectangular patches**. Each patch specifies:
   - position (`x`, `y`)
@@ -104,12 +103,12 @@ These are non-negotiable unless this document is revised.
   - catch-up only when late
   - never schedule more than one timer
 
-### 3.4 Engine events (CURRENT TARGET)
+### 3.4 Engine events
 The engine emits minimal lifecycle signals for external coordination:
-- `frame:complete` — emitted after a frame is rendered
-- `engine:idle` — emitted when the scheduler stops due to no pending work
-
-These events were chosen as an alternative to a Promise-based coordination solution, and enable reactive drivers.
+- The engine exposes a single lifecycle signal: frame completion.
+Consumers subscribe to frame completion and inspect engine state directly.
+- There is no general event bus and no explicit idle/start events.
+The engine becoming idle is defined structurally as the scheduler stopping when no pending work remains.
 
 ---
 
@@ -121,25 +120,9 @@ These events were chosen as an alternative to a Promise-based coordination solut
 - No scale reporting when `k` is unchanged.
 - Initial scale always applies (even at k=1).
 
-> Note: scaling logic will be fully removed from the engine in a later dev task.
-
 ---
 
-## 5. Perf harness (CURRENT)
-
-- Perf is currently embedded in the engine as a temporary driver.
-
-> This will be removed from the engine and replaced with an external **animation driver**.
-
-### 5.1 Driver direction (CURRENT TARGET)
-- Drivers do not own timing; they are paced by engine frames.
-- Drivers request work by calling `requestFrame(...)`.
-- The first driver is an **AnimationDriver** 
-- It will initially support a 'commit resolve' mode only; i.e. it will not cache any frames before the animation plays
-
----
-
-## 6. Design philosophy
+## 5. Design philosophy
 
 - Correctness > cleverness
 - Determinism > convenience
@@ -149,10 +132,8 @@ These events were chosen as an alternative to a Promise-based coordination solut
 
 ---
 
-## 7. Open notes
+## 6. Open notes
 
-- Naming cleanup and entry-point unification deferred to DT 3.6.
-- Module split deferred to DT 3.7 intentionally.
 - This document should be updated when invariants change.
 
 ---
