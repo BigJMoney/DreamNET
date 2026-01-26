@@ -595,12 +595,16 @@ class TerminalEngine {
   /**
    * A FrameRequest describes one engine frame worth of work.
    *
-   * @param {FrameCommandList[]} commands - Ordered list of commands to execute in this frame.
+   * @param {FrameCommandList} commands - Ordered list of commands to execute in this frame.
    * @param {string} reason - Why the frame was requested.
    *
    */
 
   requestFrame(commands, reason="") {
+
+    if (!Array.isArray(commands)) {
+      throw new Error("[engine] requestFrame(commands) requires an array of commands");
+    }
 
     // FRAME-GUARANTEE VALIDATION
     let holdIsRequested = false;
@@ -662,6 +666,7 @@ class TerminalEngine {
 
       const origin = this.frameNo; // capture at scheduling time
       requestAnimationFrame(() => {
+        this.rafIsScheduled = false;
         flog(`[frame] fired via=rAF origin=${origin} now=${this.frameNo} q=${this._queue.length}`);
         this._tick();
       });
@@ -674,7 +679,7 @@ class TerminalEngine {
     const now = performance.now();
     if (this.nextFrameDue == null) this.nextFrameDue = now;
 
-    // Catch up scenario
+    // Catch up scenario (intentionally late -> wait phase-locked; review if behavior is undesirable)
     if (this.nextFrameDue < now) {
       const missed = Math.floor((now - this.nextFrameDue) / this.frameInterval) + 1;
       this.nextFrameDue += missed * this.frameInterval;
@@ -692,9 +697,6 @@ class TerminalEngine {
 
   _tick() {
     if (!this.isRunning) return;
-
-    // We are now handling the scheduled callback to rAF.
-    this.rafIsScheduled = false;
 
     const commands = this._queue.shift();
     if (!commands) {
