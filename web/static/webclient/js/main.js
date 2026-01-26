@@ -6,9 +6,9 @@
 import { DEV, CONFIG, applyFontConfig } from "./config.js";
 import { F_BOLD, F_BLINK, writeAnsiSgrToRect } from "./ansi.js";
 import {makeFramebuffer, measureCellFrom} from "./framebuffer.js";
+import {el, waitForFonts, waitNextFrame} from "./dom_utils.js";
 
 console.log("[terminal] script loaded");
-
 
 
 // ---- State ----
@@ -26,33 +26,6 @@ function flog(msg) {
   if (!DEV) return;
   console.log(msg);
 }
-
-function el(id) {
-  const node = document.getElementById(id);
-  if (!node) throw new Error(`[terminal] missing #${id}`);
-  return node;
-}
-
-function waitNextFrame() {
-  return new Promise((resolve) => requestAnimationFrame(resolve));
-}
-
-async function waitForFonts() {
-  if (!(document.fonts && document.fonts.load)) return;
-
-  const spec = `${CONFIG.termFont.size} "${CONFIG.termFont.face}"`;
-  console.log("[fonts] load begin", spec);
-  await document.fonts.load(spec);
-  console.log("[fonts] load end", spec);
-
-  // optional best-effort
-  if (document.fonts.ready) {
-    try { await document.fonts.ready; } catch {}
-  }
-}
-
-
-
 
 
 // ---- HTML rendering (span runs) ----
