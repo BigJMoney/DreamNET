@@ -1,4 +1,8 @@
-// ---- CP437 enforcement ----
+/*
+
+Input string ANSI checking and parsing
+
+ */
 
 // CP437 byte->Unicode table (256 code points)
 const CP437_UNICODE = [
