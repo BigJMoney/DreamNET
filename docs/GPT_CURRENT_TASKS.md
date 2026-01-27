@@ -28,11 +28,11 @@ This dev task establishes a **safe rollback baseline**.
 
 ---
 
-### DT 3.5.5 — More perf content (NEXT)
+### DT 3.5.5 — More perf content (COMPLETE)
 
 Goal: Add more perf content so that future tasks are easier to test.
 
-### DT 3.6 — Engine refactor dev task
+### DT 3.6 — Engine refactor dev task (COMPLETE)
 
 Goal: simplify and clarify the engine without changing behavior.
 
@@ -48,11 +48,11 @@ Checklist:
 
 ---
 
-### DT 3.7 — ES module reorganization
+### DT 3.7 — ES module reorganization (COMPLETE)
 
 Goal: refactor monolithic code into clean ES modules **after engine contracts are stable**.
 
-Expected splits:
+Expected splits (prediction):
 - config
 - CP437
 - SGR parsing / writing
@@ -61,7 +61,18 @@ Expected splits:
 - UI scaling + reporting
 - engine core
 - boot / startup wiring
-- investigate optimization: uncapped framebuffer construction (html write still capped)
+
+Actual splits (committed):
+- main
+- config
+- log
+- dom_utils
+- ansi
+- engine
+- rendering
+- animation
+- ui
+- boot_assets
 
 ---
 
