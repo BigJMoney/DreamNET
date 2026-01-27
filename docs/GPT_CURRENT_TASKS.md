@@ -79,7 +79,7 @@ Actual splits (committed):
 
 ---
 
-### DT 4 — More perf content (RESCHEDULED)
+### DT 4 — More perf content (COMPLETE)
 
 #### Goal
 Add additional performance test content now that the performance system,
@@ -97,21 +97,13 @@ coverage.
 With the engine refactor and ES module reorganization complete, perf drivers are
 now available and suitable for extension.
 
-#### Scope
-- Add new perf scenarios that exercise realistic rendering workloads
-- Expand coverage across:
-  - frame pacing
-  - idle stop / restart behavior
-  - staged command execution
-- Improve signal quality for regression detection
-
 #### Constraints
 - No changes to engine behavior or invariants
 - No new scheduling policies
 - Perf remains driver-owned, not engine-owned
 - This task must not introduce engine-side conditionals for testing
 
-### DT 5 — Output Writers + Evennia I/O Integration
+### DT 5 — Output Writers + Evennia I/O Integration (CURRENT)
 
 #### Goal
 Introduce an output writer abstraction and integrate Evennia input/output using
