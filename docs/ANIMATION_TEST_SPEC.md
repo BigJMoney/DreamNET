@@ -242,6 +242,123 @@ This provides:
 - wrap/crop validation via P2
 - attribute/state validation via P5
 
+---
+
+## B.X Coverage Summary (Generated Boundary Matrix Content)
+
+This section describes the **actual emitted combination set** produced by the
+Boundary Matrix fullscreen generator. It exists to make the test content easier
+to reason about during step-through debugging.
+
+This summary is normative: changes to generator coverage must update this section.
+
+---
+
+### Emitted Axes
+
+Each emitted frame is identified by these axes:
+
+- **Boundary target**: one of the 12 Matrix 1 targets (corners, midpoints, wrap points, bottom-edge points)
+- **Placement pattern**: a placement class (P0, P2, etc.)
+- **Glyph bundle**: a representative character bundle (G0, G2, etc.)
+- **Case number**: a monotonically increasing index used for step-through navigation
+
+The generator also emits *paired frames* for state-carry tests (P5).
+
+---
+
+### Always-Included Glyph Bundles
+
+The generator always includes:
+
+- **G0** — ASCII Basic
+- **G2** — CP437 Box Drawing
+- **G3** — CP437 Block / Shade
+- **G5** — ANSI SGR Sequences
+
+Additionally, the generator may include:
+
+- **G1** — Whitespace / Control (Policy-Locking), when enabled
+
+The generator currently **excludes G4** (Non-CP437 / Wide / Combining) by default
+until output policy is explicitly locked.
+
+---
+
+### Always-Included Placement Patterns
+
+For every boundary target, the generator emits:
+
+- **P0** — Single Glyph (core correctness)
+- **P2** — Cross-Column Wrap (crop/wrap correctness, forced at `x = C-2`)
+
+These patterns are considered the minimal baseline for boundary correctness.
+
+---
+
+### Conditionally Included Placement Patterns
+
+The generator may emit additional placements based on bundle traits and flags:
+
+- **P3** — Newline Boundary
+  - Emitted when `includeP3` is enabled AND the glyph bundle has newline potential.
+  - Implemented structurally (two-row effect) to preserve the invariant that each
+    fullscreen frame contains exactly `rows` lines.
+
+- **P4** — Trailing Whitespace
+  - Emitted when `includeP4` is enabled AND the glyph bundle is whitespace-sensitive.
+
+- **P5** — Partial Overwrite (State Carry)
+  - Emitted when `includeP5` is enabled.
+  - Emitted as **two consecutive frames** per case:
+    - `P5_BASE`
+    - `P5_OVERWRITE`
+
+---
+
+### Bounded Combination Rules (Volume Control)
+
+To avoid combinatorial explosion, the generator enforces bounded coverage:
+
+For each boundary target:
+
+1. **P0** is emitted for **all enabled** glyph bundles.
+2. **P2** is emitted only for the subset:
+   - `G0`, `G2`, `G5`
+3. **P5** (when enabled) is emitted only for:
+   - `G5` paired with one non-SGR bundle (`G2` and `G3`),
+   - and emitted as `P5_BASE` + `P5_OVERWRITE` frames.
+
+This creates strong coverage for:
+- per-cell glyph correctness (P0)
+- wrap/crop correctness at the right edge (P2)
+- SGR attribute carry / bleed and overwrite behavior (P5)
+
+without requiring every placement × bundle × target cross-product.
+
+---
+
+### What Is Not Covered Yet (Intentional Gaps)
+
+The following are intentionally not covered by this generator suite:
+
+- **P1** — Two Glyph baseline at all targets (available to add later)
+- **Full rectangle edge-crossing cases** (x+w == C+1, y+h == R+1, etc.)
+  - These belong to drawRect-specific suites beyond Matrix 1.
+- **G4** non-CP437 / wide / combining input policy tests (deferred)
+- **Multi-frame sequencing correctness** (covered by playFrames sequencing suite)
+- **High-volume stress behavior** (covered by stress suites)
+
+These gaps are not bugs; they are deliberate scope boundaries for Matrix 1.
+
+---
+
+### Practical Debugging Notes
+
+- Repetition of `Gx:Py` labels is expected; the boundary target changes even when
+  bundle and placement remain the same.
+- When stepping frames, use the target tag (and/or coordinates, if present) to
+  correlate what you are seeing to the boundary point under test.
 
 ---
 
