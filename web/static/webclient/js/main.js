@@ -1,93 +1,21 @@
 /*
  *
- * DreamNET Webclient GUI component (framebuffer-first)
+ * DreamNET Webclient component entry code.
  *
  */
+
 import { DEV, CONFIG, applyFontConfig } from "./config.js";
-import { F_BOLD, F_BLINK, writeAnsiSgrToRect } from "./ansi.js";
-import {makeFramebuffer, measureCellFrom} from "./framebuffer.js";
 import {el, waitForFonts, waitNextFrame} from "./dom_utils.js";
+import {TerminalEngine} from "./engine.js";
+import {flog} from "./log.js";
 
 console.log("[terminal] script loaded");
 
 
 // ---- State ----
 
-let framebuffer = null;          // Cell[][] length termRows x termCols
 let cell = { w: 0, h: 0 };       // measured at k=1 from termSurface styles
 let scaleK = 0;                   //todo: move to ui module
-
-
-// ---- Helpers ----
-
-// todo: figure out why this isn't working
-// Keep logs cheap: prefer strings/numbers; only log objects when needed.
-function flog(msg) {
-  if (!DEV) return;
-  console.log(msg);
-}
-
-
-// ---- HTML rendering (span runs) ----
-
-function escapeHtml(s) {
-  // Minimal escape for innerHTML
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-// Derive CSS class string for a given cell.
-function classesForCell(c) {
-  let cls = `fg${c.fg} bg${c.bg}`;
-
-  if (c.flags & F_BOLD) cls += " b";
-  if (c.flags & F_BLINK) cls += " blink";
-
-  // NOTE: inverse is applied at write-time in MVP, so no class needed.
-  return cls;
-}
-
-function renderFramebufferToHtml(fb) {
-  const rows = fb.length;
-  const cols = fb[0]?.length ?? 0;
-
-  let html = "";
-
-  for (let y = 0; y < rows; y++) {
-    const row = fb[y];
-
-    // Build runs of identical style
-    let runCls = null;
-    let runText = "";
-
-    for (let x = 0; x < cols; x++) {
-      const c = row[x];
-      const cls = classesForCell(c);
-
-      if (runCls === null) {
-        runCls = cls;
-        runText = c.ch;
-        continue;
-      }
-
-      if (cls === runCls) {
-        runText += c.ch;
-      } else {
-        html += `<span class="${runCls}">${escapeHtml(runText)}</span>`;
-        runCls = cls;
-        runText = c.ch;
-      }
-    }
-    if (runCls !== null) {
-      html += `<span class="${runCls}">${escapeHtml(runText)}</span>`;
-    }
-    if (y !== rows - 1) html += "\n";
-  }
-  return html;
-}
 
 
 // ---- Report ----
@@ -167,6 +95,7 @@ function applyScale(k) {
   });
 }
 
+// todo: move
 function recomputeScale() {
   const viewport = el("viewport");
 
@@ -183,256 +112,10 @@ function recomputeScale() {
 
 // ---- Rendering ----
 
-function renderFramebuffer() {
-  const surface = el("termSurface");
-  surface.innerHTML = renderFramebufferToHtml(framebuffer);
-}
 
 
-// ---------------------------------------------------------------------------
-// TerminalEngine
-// ---------------------------------------------------------------------------
-// NOTE: TerminalEngine assumes the following globals exist (as in your current file):
-// todo: make sure they end up in the right place during refactor
-// - framebuffer
-// - writeAnsiSgrToRect(fb, text, x, y, w, h)
-// - renderFramebuffer()
-// - CONFIG.termCols / CONFIG.termRows (or pass cols/rows as opts)
 
-/**
- *
- * @typedef {(RectDrawCommand|HoldCommand)[]} FrameCommandList
- *  A list of frame command objects and their associated data
- *
- * @typedef {Object} RectDrawCommand
- *  Paints text into an arbitrarily sized rectangle in the framebuffer.
- * @property {"drawRect"} name
- * @property {[number, number]} rStart - Top-left corner of the rectangle in x, y coordinates.
- * @property {[number, number]} rSize - Width and height of the rectangle as w, h values.
- * @property {string} rText - Text content to write into the rectangle.
- *
- * @typedef {Object} HoldCommand
- *  Instructs the renderer to continue rendering the current framebuffer in the next frame (for animation)
- * @property {"hold"} name
- * @property {boolean=} repaint // ignored for now
- *
- * Append
- *  future release
- *
- */
 
-class TerminalEngine {
-
-  constructor(opts = {}) {
-    this.cols = (opts.cols ?? CONFIG.termCols) | 0;
-    this.rows = (opts.rows ?? CONFIG.termRows) | 0;
-
-    this.dev = !!opts.dev;
-    this.fps = (this.dev ? (opts.devFps | 0) : 0) | 0; // 0 = event-driven
-    this.frameInterval = this.fps > 0 ? (1000 / this.fps) : 0;
-
-    // Scheduler state
-    this.isRunning = false;
-    this.nextFrameDue = null;
-    this.rafIsScheduled = false;
-    this.timerId = null;
-
-    // Pending frame requests (FIFO)
-    this._queue = [];
-
-    // Frame counter (monotonic per engine instance)
-    this.frameNo = 0;
-    // Will receive an event when a frame is complete
-    this._frameCompleteListeners = [];
-
-  }
-
-  // -------------------------------------------------------------------------
-  // Events
-  // -------------------------------------------------------------------------
-
-  subFrameComplete(callback) {
-    this._frameCompleteListeners.push(callback)
-  }
-
-  unsubFrameComplete(callback) {
-    const i = this._frameCompleteListeners.indexOf(callback);
-    if (i !== -1) this._frameCompleteListeners.splice(i, 1);
-  }
-
-  _emitFrameComplete() {
-    for (const callb of this._frameCompleteListeners) {
-      try { callb(); } catch (e) { console.error("[engine] frameComplete listener threw", e); }
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // API
-  // -------------------------------------------------------------------------
-
-  /**
-   * A FrameRequest describes one engine frame worth of work.
-   *
-   * @param {FrameCommandList} commands - Ordered list of commands to execute in this frame.
-   * @param {string=} reason - Why the frame was requested.
-   * @returns {void}
-   *
-   */
-
-  requestFrame(commands, reason="") {
-
-    if (!Array.isArray(commands)) {
-      throw new Error("[engine] requestFrame(commands) requires an array of commands");
-    }
-
-    // FRAME-GUARANTEE VALIDATION
-    let holdIsRequested = false;
-    for (const cmd of commands) {
-      if (cmd && cmd.name === "hold") {
-        holdIsRequested = true;
-        break;
-      }
-    }
-
-    if (holdIsRequested && commands.length > 1) {
-      throw new Error(
-        "[engine] invalid FrameRequest: 'hold' is a frame-level guarantee and must be the only command"
-      );
-    }
-
-    this._queue.push(commands);
-
-    if (!this.isRunning) {
-      this._resetScheduler();
-      this.isRunning = true;
-      this._scheduleNextTick();
-    }
-  }
-
-  // Reason to stay alive
-  hasPendingWork() {
-    return this._queue.length > 0;
-  }
-
-  // -------------------------------------------------------------------------
-  // Scheduler
-  // -------------------------------------------------------------------------
-
-  _resetScheduler() {
-    this.nextFrameDue = null;
-    this.rafIsScheduled = false;
-    if (this.timerId) {
-      clearTimeout(this.timerId);
-      this.timerId = null;
-    }
-  }
-
-  _scheduleNextTick() {
-    if (!this.isRunning) return;
-
-    if (!this.hasPendingWork()) {
-      this.isRunning = false;
-      this._resetScheduler();
-      return;
-    }
-
-    // Uncapped fps path (fps = 0): schedule via rAF only while work exists
-    if (this.fps <= 0) {
-      if (this.rafIsScheduled) return;
-      this.rafIsScheduled = true;
-
-      const origin = this.frameNo; // capture at scheduling time
-      requestAnimationFrame(() => {
-        this.rafIsScheduled = false;
-        this._tick();
-      });
-      return;
-    }
-
-    // Capped fps path: schedule via setTimeout
-    if (this.timerId) return;
-
-    const now = performance.now();
-    if (this.nextFrameDue == null) this.nextFrameDue = now;
-
-    // Catch up scenario (intentionally late -> wait phase-locked; review if behavior is undesirable)
-    if (this.nextFrameDue < now) {
-      const missed = Math.floor((now - this.nextFrameDue) / this.frameInterval) + 1;
-      this.nextFrameDue += missed * this.frameInterval;
-    }
-
-    const delay = this.nextFrameDue - now;
-
-    const origin = this.frameNo;
-    this.timerId = setTimeout(() => {
-      this.timerId = null;
-      this._tick();
-    }, delay);
-  }
-
-  _tick() {
-    if (!this.isRunning) return;
-
-    const commands = this._queue.shift();
-    if (!commands) {
-      // Shouldn't happen because hasPendingWork() was true, but be defensive.
-      console.warn("[frame] tick with empty queue; forcing idle");
-      this._scheduleNextTick();
-      return;
-    }
-
-    // Execute exactly one frame request per tick
-    this._runOneFrame(commands);
-
-    this.frameNo++;
-    this._emitFrameComplete();
-
-    // Advance cadence tracking for capped fps
-    if (this.fps > 0) {
-      this.nextFrameDue += this.frameInterval;
-    }
-
-    this._scheduleNextTick();
-  }
-
-  // -------------------------------------------------------------------------
-  // Frame execution
-  // -------------------------------------------------------------------------
-
-  /**
-   * Execute a single FrameRequest: apply all commands, then render once.
-   * No framebuffer mutation should occur outside this function.
-   */
-  _runOneFrame(commands) {
-
-    for (const cmd of commands) {
-      if (!cmd || typeof cmd !== "object") {
-        console.warn("[frame] invalid command (non-object)", cmd);
-        continue;
-      }
-
-      if (cmd.name === "hold") {
-        break;  // Footgun defense (shouldn't be needed but doesn't hurt)
-      }
-
-      if (cmd.name === "drawRect") {
-        const x = (cmd.rStart?.[0] ?? 0) | 0;
-        const y = (cmd.rStart?.[1] ?? 0) | 0;
-        const w = (cmd.rSize?.[0] ?? 0) | 0;
-        const h = (cmd.rSize?.[1] ?? 0) | 0;
-        const text = String(cmd.rText ?? "<ENGINE ERROR: no rText for drawRect>");
-
-        writeAnsiSgrToRect(framebuffer, text, x, y, w, h);
-        continue;
-      }
-
-      console.warn("[frame] unknown command!", cmd);
-    }
-
-    // Render exactly once per frame
-    renderFramebuffer();
-  }
-}
 
 /**
  * A simple text animation defined as a list of frames. Each element in the array is one animation frame.
@@ -793,18 +476,11 @@ async function initializeTerminal() {
   console.log("[start] settle frames end");
 
   console.log("[start] measure cell begin");
-  cell = measureCellFrom(el("termSurface"));
+  //cell = measureCellFrom(el("termSurface"));
   console.log("[start] measure cell end", cell);
 
-  console.log("[start] init framebuffer begin");
-  framebuffer = makeFramebuffer(CONFIG.termCols, CONFIG.termRows);
-  console.log("[start] init framebuffer end");
-
   console.log("[start] init engine begin");
-  engine = new TerminalEngine({
-    dev: DEV,
-    devFps: CONFIG.devFps,
-  });
+  engine = new TerminalEngine();
   console.log("[start] init engine end");
 
   console.log("[start] init AnimDriver begin");
