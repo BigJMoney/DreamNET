@@ -58,30 +58,6 @@ function escapeHtml(s) {
 // Public API
 // -------------------------------------------------------------------------
 
-export function measureCellFrom(surfaceEl) {
-  const measurer = document.createElement("span");
-  measurer.setAttribute("aria-hidden", "true");
-  measurer.style.position = "absolute";
-  measurer.style.left = "-99999px";
-  measurer.style.top = "0";
-  measurer.style.whiteSpace = "pre";
-  measurer.style.visibility = "hidden";
-  measurer.style.pointerEvents = "none";
-
-  surfaceEl.appendChild(measurer);
-
-  const N = 200;
-  measurer.textContent = "█".repeat(N);
-  const rectW = measurer.getBoundingClientRect().width;
-  const w = rectW / N;
-
-  measurer.textContent = "█\n".repeat(40);
-  const rectH = measurer.getBoundingClientRect().height;
-  const h = rectH / 40;
-
-  measurer.remove();
-  return { w, h };
-}
 
 export function initRenderer() {
   // Do safety checks at API boundary
