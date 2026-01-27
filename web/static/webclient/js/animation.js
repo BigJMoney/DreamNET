@@ -115,7 +115,7 @@ export class AnimationDriver {
   /**
    * Start playing an array of text frames.
    *
-   * @param {list} frames - A list of animation frames
+   * @param {string[]} frames - A list of animation frames
    * @param {AnimPlayOpts=} opts - See typedef
    * @returns {boolean} - Whether play started (false if already playing).
    */
