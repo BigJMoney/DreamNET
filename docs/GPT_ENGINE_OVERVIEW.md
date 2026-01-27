@@ -67,22 +67,29 @@ These are non-negotiable unless this document is revised.
 ## 3. Engine execution model (CURRENT)
 
 ### 3.1 Entry points (Public API)
-- `requestFrame(frameRequest, reason)` is the **only** public entry point.
-- A frame request represents **exactly one frame**: apply work to framebuffer + render once.
-- Each call to `requestFrame` requests **exactly one frame**. A frame consists of:
-  - applying framebuffer mutations
-  - rendering exactly once
-- The payload is required for every call, even if it contains no patches.
+
+- `requestFrame(commands, reason="")` is the **only** public entry point.
+- Each call requests **exactly one engine frame**.
+- A frame consists of:
+  1. executing the submitted command list in-order
+  2. rendering exactly once
+  3. incrementing `frameNo`
+  4. emitting `frameComplete`
 - The engine does not expose any other wake, staging, or scheduling mechanisms.
 
-#### 3.1.1 Frame request shape
-- The engine operates exclusively on **frames**, not jobs.
-- A frame request is expressed as one or more **rectangular patches**. Each patch specifies:
-  - position (`x`, `y`)
-  - size (`w`, `h`)
-  - content (`text`)
-- A full-screen update is represented as a patch covering the entire terminal grid.
-- There is no command-type switching inside the engine. Rectangular patching is the universal primitive.
+#### 3.1.1 Frame request shape (CURRENT)
+
+- The engine operates exclusively on **FrameCommandList**: an ordered list of command objects.
+- Current command set (MVP):
+  - `drawRect`: rectangular write into the framebuffer using ANSI SGR handling
+  - `hold`: a frame-level guarantee (pacing/no-op frame). Must be the only command in the request.
+- Command-type switching exists in the engine today (MVP scope). This is expected to evolve as input/control
+  commands are introduced, and as rendering dispatch migrates further into the renderer module.
+
+**Note (DT 3.7 modularization):**
+- Framebuffer allocation and DOM surface binding live in `renderer.js`.
+- `TerminalEngine` initializes the renderer at construction time (single-instance invariant) and obtains the
+  framebuffer via `getFramebuffer()` for frame execution.
 
 ### 3.2 Loop lifecycle
 - Idle → no timers, no rAF, `running=false`
@@ -109,6 +116,7 @@ The engine emits minimal lifecycle signals for external coordination:
 Consumers subscribe to frame completion and inspect engine state directly.
 - There is no general event bus and no explicit idle/start events.
 The engine becoming idle is defined structurally as the scheduler stopping when no pending work remains.
+- Performance metrics are currently driver-owned, not engine-owned
 
 ---
 
