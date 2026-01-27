@@ -152,26 +152,83 @@ These must never crash parsing.
 
 ## B. Core Boundary Matrix
 
-This suite forms the **baseline correctness net**.
+This suite forms the **baseline correctness net** and is defined as a matrix:
 
-### Boundary Targets Used
-- 4 corners
+> **Matrix 1: Boundary × Placement × GlyphClass**
+
+The intent is to systematically cover boundary behavior without exploding test volume.
+
+---
+
+### B.1 Boundary Targets Used
+
+The boundary matrix uses a fixed set of target points:
+
+- 4 corners:
+  - `(X0, Y0)`
+  - `(XL, Y0)`
+  - `(X0, YB)`
+  - `(XL, YB)`
+
 - 2 midpoints:
   - `(floor(C / 2), 0)`
   - `(0, floor(R / 2))`
+
 - 2 row-wrap targets:
   - `(C - 2, yMid)`
   - `(C - 1, yMid)`
+
 - 2 bottom-edge targets:
   - `(xMid, R - 2)`
   - `(xMid, R - 1)`
 
 Total: **12 targets**
 
-### Required Combinations
-For each boundary target:
+---
 
-- Run **P0** with all glyph bundles
+### B.2 Placement Patterns to Apply
+
+For each boundary target, placement patterns are selected by rule:
+
+**Always apply (core):**
+- **P0** — Single Glyph
+- **P1** — Two Glyph
+- **P2** — Cross-Column Wrap
+
+**Conditionally apply:**
+- For any glyph bundle / test string with `\n` potential: also apply **P3** — Newline Boundary
+- For whitespace-sensitive bundles: also apply **P4** — Trailing Whitespace
+- For style/state tests: also apply **P5** — Partial Overwrite (State Carry)
+
+This selection logic is part of the test contract.
+
+---
+
+### B.3 Glyph Bundles to Apply
+
+Glyph bundles are selected by rule:
+
+**Always include:**
+- **G0** — ASCII Basic
+- **G2** — CP437 Box Drawing
+- **G3** — CP437 Block / Shade
+- **G5** — ANSI SGR Sequences
+
+**Include behind an explicit “policy chosen” flag (but still run to lock behavior):**
+- **G1** — Whitespace / Control (Policy-Locking)
+- **G4** — Non-CP437 / Wide / Combining (Safe Degradation)
+
+The “policy chosen” flag exists because these bundles require an explicit normalization /
+replacement decision. Once the policy is selected, these cases must run to prevent regressions.
+
+---
+
+### B.4 Required Combination Rules (Volume Control)
+
+To keep the suite comprehensive but bounded:
+
+For each boundary target:
+- Run **P0** with *all enabled* glyph bundles (always-set + policy-gated bundles when enabled)
 - Run **P2** with:
   - `G0`
   - `G2`
@@ -180,11 +237,23 @@ For each boundary target:
   - `G5`
   - one non-SGR bundle (`G2` or `G3`)
 
-This balances coverage with test volume.
+This provides:
+- broad correctness coverage via P0
+- wrap/crop validation via P2
+- attribute/state validation via P5
+
 
 ---
 
 ## C. Animation-Specific Content
+
+All animation test content must explicitly exercise the following phases:
+- first frame (initial mutation)
+- middle frames (steady-state mutation)
+- hold-only frames (no-op mutation)
+- final frame (last mutation before idle)
+- idle transition after completion
+
 
 ### Suite A — playFrames() Sequencing Proof
 
@@ -206,6 +275,11 @@ Purpose: verify frame ordering, holds, and determinism.
 - Hold frames do not mutate framebuffer
 - Engine idles after final frame
 - Replays produce identical snapshots
+
+Each animation scenario must be executed at least twice without
+reinitializing unrelated engine or renderer state.
+
+Identical framebuffer output is required at defined checkpoints.
 
 ---
 
@@ -234,6 +308,11 @@ Purpose: validate higher-level animation composition.
 - Stable edge clipping
 - Final framebuffer matches expected pattern
 
+Each animation scenario must be executed at least twice without
+reinitializing unrelated engine or renderer state.
+
+Identical framebuffer output is required at defined checkpoints.
+
 ---
 
 ## D. Stress Content Suites
@@ -256,6 +335,14 @@ Two variants:
 - **B:** same total payload spread across **2× frames**
 
 These exercise different performance paths.
+
+These two variants are intentionally non-equivalent:
+
+- Variant A stresses parsing, clipping, and single-frame cost
+- Variant B stresses scheduling, frame turnover, and state churn
+
+Both must be retained to avoid masking performance regressions.
+
 
 ---
 
