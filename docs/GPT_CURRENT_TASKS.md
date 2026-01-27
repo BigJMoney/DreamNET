@@ -28,9 +28,12 @@ This dev task establishes a **safe rollback baseline**.
 
 ---
 
-### DT 3.5.5 — More perf content (COMPLETE)
+### DT 3.5.5 — More perf content (SKIPPED/DEFERRED)
 
 Goal: Add more perf content so that future tasks are easier to test.
+
+This goal wasn't achieved because moving the performance system itself happened across DT 3.6 and 3.7, so it was not 
+available for testing until after the refactors.
 
 ### DT 3.6 — Engine refactor dev task (COMPLETE)
 
