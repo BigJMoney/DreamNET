@@ -79,11 +79,69 @@ Actual splits (committed):
 
 ---
 
-### DT 4 — Writers
-Output writer abstraction.
+### DT 4 — More perf content (RESCHEDULED)
 
-### DT 5 — Evennia I/O
-Evennia input/output integration.
+#### Goal
+Add additional performance test content now that the performance system,
+drivers, and engine contracts are stable.
+
+This task exists to improve confidence and observability for future feature
+work, not to change engine behavior.
+
+#### Background
+This task was originally planned as DT 3.5.5 but was skipped at the time because
+the performance system itself was moved and finalized across DT 3.6 and DT 3.7.
+As a result, there was no stable surface available for adding meaningful perf
+coverage.
+
+With the engine refactor and ES module reorganization complete, perf drivers are
+now available and suitable for extension.
+
+#### Scope
+- Add new perf scenarios that exercise realistic rendering workloads
+- Expand coverage across:
+  - frame pacing
+  - idle stop / restart behavior
+  - staged command execution
+- Improve signal quality for regression detection
+
+#### Constraints
+- No changes to engine behavior or invariants
+- No new scheduling policies
+- Perf remains driver-owned, not engine-owned
+- This task must not introduce engine-side conditionals for testing
+
+### DT 5 — Output Writers + Evennia I/O Integration
+
+#### Goal
+Introduce an output writer abstraction and integrate Evennia input/output using
+that abstraction, without leaking Evennia-specific logic into the engine.
+
+These two concerns are treated as a single dev task because they are
+co-dependent and cannot be meaningfully validated in isolation.
+
+#### Scope
+- Define a writer abstraction for terminal output
+- Route engine frame output through writers rather than direct sinks
+- Implement an Evennia-specific writer / adapter
+- Integrate Evennia output as an external data source
+- Integrate Evennia input submission without affecting engine scheduling
+
+#### Constraints
+- No Evennia-specific logic inside:
+  - engine core
+  - scheduler
+  - framebuffer mutation
+- Writers must operate on engine-defined boundaries (frame-complete, output-ready)
+- No implicit background polling or hidden loops
+- Engine invariants remain unchanged
+
+#### Notes
+- This task establishes the primary I/O boundary for DreamNET
+- Writer abstraction must be validated by real Evennia integration, not
+  speculative design
+- Animation, buffering, and input gating policies are explicitly out of scope
+  and handled in later dev tasks
 
 ### DT 6: Input await buffer with idle-gated flush (one per idle)
 
