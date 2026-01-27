@@ -29,6 +29,14 @@ function setupResizeHandling() {
   });
 }
 
+// For debug only
+import {debugClearAndRenderOneFrame, initDebugInput} from "./debug_input.js";
+
+if (DEV) {
+  initDebugInput({
+    onSpace: () => debugClearAndRenderOneFrame(engine, engine.cols, engine.rows),
+  });
+}
 
 // ---- Startup ----
 
@@ -76,14 +84,29 @@ async function initializeTerminal() {
   console.log("[start] end");
 
   if (DEV) {
-    console.log("[dev] load perf test screens begin");
+    /*console.log("[dev] load perf test screens begin");
     const testloop = await loadPerfTestScreens();
     console.log("[dev] load perf test screens end");
     if (testloop) {
       animDriver.playFrames(testloop, {
         loop: 20,
       });
-    }
+    }*/
+    const { meta, frames } = genBoundaryMatrixFrames({
+      cols: 40,
+      rows: 10,
+      enableG1: true,   // your choice #1
+      includeP3: true,
+      includeP4: true,
+      includeP5: true,
+    });
+
+    // fullscreen frames → directly compatible with playFrames()
+    animDriver.playFrames(frames, {
+      framesPerStep: 1,
+      loop: 0,
+      // rStart/rSize omitted => fullscreen
+    });
   }
 }
 
