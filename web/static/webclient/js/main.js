@@ -34,7 +34,7 @@ import {debugClearAndRenderOneFrame, initDebugInput} from "./debug_input.js";
 
 if (DEV) {
   initDebugInput({
-    onSpace: () => debugClearAndRenderOneFrame(engine, engine.cols, engine.rows),
+    onSpace: () => animDriver.togglePause("debug spacebar"),
   });
 }
 

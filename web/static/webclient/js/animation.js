@@ -57,6 +57,7 @@ export class AnimationDriver {
     this.framesPerStep = 1; // integer >= 1
     this.accum = 0;
     this.stopRequested = false;
+    this.isPaused = false;
 
     // Perf tracking
     this._perfStart = 0;
@@ -118,32 +119,32 @@ export class AnimationDriver {
    * @param {AnimPlayOpts=} opts - See typedef
    * @returns {boolean} - Whether play started (false if already playing).
    */
-playFrames(frames, opts = {}) {
-  if (this.playing) {
-    console.warn("[anim] playFrames rejected: already playing");
-    return false;
+  playFrames(frames, opts = {}) {
+    if (this.playing) {
+      console.warn("[anim] playFrames rejected: already playing");
+      return false;
+    }
+    if (!Array.isArray(frames)) {
+      throw new Error("[anim] playFrames requires an array of strings");
+    }
+
+    const framesPerStep = Math.max(1, (opts.framesPerStep | 0) || 1);
+    const loop = Math.max(1, (opts.loop | 0) || 1);
+
+    const rStart = opts.rStart ?? [0, 0];
+    const rSize = opts.rSize ?? [this.engine.cols, this.engine.rows];
+
+    const frameCmds = frames.map((t) => ([{
+      name: "drawRect",
+      rStart,
+      rSize,
+      rText: String(t),
+    }]));
+
+    const anim = { framesPerStep, loop, frameCmds };
+
+    return this.play(anim);
   }
-  if (!Array.isArray(frames)) {
-    throw new Error("[anim] playFrames requires an array of strings");
-  }
-
-  const framesPerStep = Math.max(1, (opts.framesPerStep | 0) || 1);
-  const loop = Math.max(1, (opts.loop | 0) || 1);
-
-  const rStart = opts.rStart ?? [0, 0];
-  const rSize = opts.rSize ?? [this.engine.cols, this.engine.rows];
-
-  const frameCmds = frames.map((t) => ([{
-    name: "drawRect",
-    rStart,
-    rSize,
-    rText: String(t),
-  }]));
-
-  const anim = { framesPerStep, loop, frameCmds };
-
-  return this.play(anim);
-}
 
   /**
    * Request the active animation to stop (takes effect on next frame boundary).
@@ -153,6 +154,26 @@ playFrames(frames, opts = {}) {
   requestStop() {
     if (!this.playing) return;
     this.stopRequested = true;
+  }
+
+  /**
+   * Request the active animation to go into a holding pattern
+   *
+   * @param reason
+   * @returns {boolean}
+   */
+  togglePause(reason = "") {
+    if (!this.playing) return false;
+
+    this.isPaused = !this.isPaused;
+    log(`[anim] togglePause(): paused=${this.isPaused} reason="${reason}"`);
+
+    if (!this.isPaused) {
+      // Resume by requesting a hold boundary (same mechanism already used elsewhere).
+      this.engine.requestFrame([{ name: "hold" }], "anim resume");
+    }
+
+    return this.isPaused;
   }
 
 
@@ -180,6 +201,12 @@ playFrames(frames, opts = {}) {
 
     if (this.stopRequested) {
       this._finish();
+      return;
+    }
+
+    if (this.isPaused) {
+      log("[anim] _runStep(): paused -> skip scheduling/advance");
+      log("[anim] _runStep(): returning (paused)");
       return;
     }
 
