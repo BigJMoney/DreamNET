@@ -94,7 +94,6 @@ export class TerminalEngine {
    * @returns {void}
    *
    */
-
   requestFrame(commands, reason="") {
 
     if (!Array.isArray(commands)) {
@@ -232,10 +231,10 @@ export class TerminalEngine {
       }
 
       if (cmd.name === "drawRect") {
-        const x = (cmd.rStart?.[0] ?? 0) | 0;
-        const y = (cmd.rStart?.[1] ?? 0) | 0;
-        const w = (cmd.rSize?.[0] ?? 0) | 0;
-        const h = (cmd.rSize?.[1] ?? 0) | 0;
+        const x = (cmd.rStart?.[0] ?? 0);
+        const y = (cmd.rStart?.[1] ?? 0);
+        const w = (cmd.rSize?.[0] ?? this.cols);
+        const h = (cmd.rSize?.[1] ?? this.rows);
         const text = String(cmd.rText ?? "<ENGINE ERROR: no rText for drawRect>");
 
         writeAnsiSgrToRect(this._fb, text, x, y, w, h);
