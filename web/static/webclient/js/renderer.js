@@ -13,6 +13,7 @@ Takes input from AnimationDriver and various input Writers, rather than directly
 
  */
 
+
 let framebuffer = null;
 let surfaceEl = null;
 let _initialized = false;

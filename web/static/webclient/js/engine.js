@@ -1,3 +1,8 @@
+import {CONFIG, DEV} from "./config.js";
+import {writeAnsiSgrToRect} from "./ansi.js";
+import {getFramebuffer, initRenderer, renderFramebuffer} from "./renderer.js";
+import {flog} from "./log.js";
+
 /*
 
 Engine for the webclient that controls timing. Its main priority is currently just the renderer, but in the (near)
@@ -5,20 +10,6 @@ Engine for the webclient that controls timing. Its main priority is currently ju
 
  */
 
-import {CONFIG, DEV} from "./config.js";
-import {writeAnsiSgrToRect} from "./ansi.js";
-import {getFramebuffer, initRenderer, renderFramebuffer} from "./renderer.js";
-import {flog} from "./log.js";
-
-// ---------------------------------------------------------------------------
-// TerminalEngine
-// ---------------------------------------------------------------------------
-// NOTE: TerminalEngine assumes the following globals exist (as in your current file):
-// todo: make sure they end up in the right place during refactor
-// - framebuffer
-// - writeAnsiSgrToRect(fb, text, x, y, w, h)
-// - renderFramebuffer()
-// - CONFIG.termCols / CONFIG.termRows (or pass cols/rows as opts)
 
 /**
  *

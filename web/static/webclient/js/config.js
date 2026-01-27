@@ -1,4 +1,10 @@
-// config.js
+/*
+
+General Webclient configuration.
+
+ */
+
+
 export const DEV = /[?&]dreamnetDev=1\b/.test(location.search);
 
 export const CONFIG = {

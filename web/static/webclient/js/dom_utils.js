@@ -1,10 +1,11 @@
+import {CONFIG} from "./config.js";
+
 /*
 
 HTML and DOM utilities.
 
  */
 
-import {CONFIG} from "./config.js";
 
 export function el(id) {
   const node = document.getElementById(id);
