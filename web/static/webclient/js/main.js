@@ -4,6 +4,7 @@ import {TerminalEngine} from "./engine.js";
 import {AnimationDriver} from "./animation.js";
 import {loadBootScreenText, loadPerfTestScreens} from "./boot_assets.js";
 import {initUi, recomputeScale} from "./ui.js";
+import {genBoundaryMatrixFrames} from "./test/anim_boundary_matrix_testcontent.js";
 
 /*
  *
