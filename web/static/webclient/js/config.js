@@ -17,7 +17,7 @@ export const CONFIG = {
     lineheight: "16px",
     spacing: "0px",
   },
-  bootScreenUrl: "/static/webclient/ui/virtual_mode04.ans",
+  bootScreenUrl: "/static/webclient/ui/virtual_mode05.ans",
   devBootScreenUrlBase: "/static/webclient/ui/sgr_blocks10_shift_with_page_135x49_shift",
   devFps: 20,
 };
