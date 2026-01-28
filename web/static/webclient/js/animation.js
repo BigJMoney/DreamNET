@@ -166,7 +166,7 @@ export class AnimationDriver {
     if (!this.playing) return false;
 
     this.isPaused = !this.isPaused;
-    log(`[anim] togglePause(): paused=${this.isPaused} reason="${reason}"`);
+    flog(`[anim] togglePause(): paused=${this.isPaused} reason="${reason}"`);
 
     if (!this.isPaused) {
       // Resume by requesting a hold boundary (same mechanism already used elsewhere).
