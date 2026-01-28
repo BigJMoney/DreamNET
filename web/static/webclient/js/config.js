@@ -6,6 +6,7 @@ General Webclient configuration.
 
 
 export const DEV = /[?&]dreamnetDev=1\b/.test(location.search);
+export const TEST = /[?&]dreamnetTest=1\b/.test(location.search);
 
 export const CONFIG = {
   termCols: 135,

@@ -1,8 +1,8 @@
-import { DEV, applyFontConfig } from "./config.js";
+import { DEV, TEST, applyFontConfig } from "./config.js";
 import {waitForFonts, waitNextFrame} from "./dom_utils.js";
 import {TerminalEngine} from "./engine.js";
 import {AnimationDriver} from "./animation.js";
-import {loadBootScreenText, loadPerfTestScreens} from "./boot_assets.js";
+import {loadBootScreenText} from "./boot_assets.js";
 import {initUi, recomputeScale} from "./ui.js";
 import {genBoundaryMatrixFrames} from "./test/anim_boundary_matrix_testcontent.js";
 import {createOutputCoordinator} from "./output_coordinator.js";
@@ -112,15 +112,7 @@ async function initializeTerminal() {
 
   console.log("[start] end");
 
-  if (DEV) {
-    /*console.log("[dev] load perf test screens begin");
-    const testloop = await loadPerfTestScreens();
-    console.log("[dev] load perf test screens end");
-    if (testloop) {
-      animDriver.playFrames(testloop, {
-        loop: 20,
-      });
-    }*/
+  if (TEST) {
     const { meta, frames } = genBoundaryMatrixFrames({
       cols: 40,
       rows: 10,
