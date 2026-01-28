@@ -5,6 +5,8 @@ import {AnimationDriver} from "./animation.js";
 import {loadBootScreenText, loadPerfTestScreens} from "./boot_assets.js";
 import {initUi, recomputeScale} from "./ui.js";
 import {genBoundaryMatrixFrames} from "./test/anim_boundary_matrix_testcontent.js";
+import {createOutputCoordinator} from "./output_coordinator.js";
+import {ScrollbackWriter} from "./writers.js";
 
 /*
  *
@@ -66,6 +68,32 @@ async function initializeTerminal() {
   console.log("[start] init AnimDriver begin");
   animDriver = new AnimationDriver(engine);
   console.log("[start] init AnimDriver end");
+
+  console.log("[start] init output coordinator begin");
+
+  // ---- Output wiring ----
+  const mainWriter = new ScrollbackWriter({
+    writerId: "main",
+    // Webclient A1: fullscreen rect, but keep it explicit for future windows
+    rStart: [0, 0],
+    rSize: [engine.cols, engine.rows],
+    cols: engine.cols,
+    rows: engine.rows,
+  });
+
+  const output = createOutputCoordinator({ engine, writer: mainWriter });
+
+  // Replace the buffer bridge with the real one and drain its contents
+  /*const prev = window.dreamnet.output;
+  window.dreamnet.output = output;
+  if (prev && typeof prev._drainTo === "function") prev._drainTo(output);*/
+
+
+  // Stable bridge contract for Evennia plugins (classic scripts)
+  window.dreamnet = window.dreamnet || {};
+  window.dreamnet.output = output;
+
+  console.log("[start] init output coordinator end");
 
   console.log("[start] load boot screen begin");
   const bootText = await loadBootScreenText();
@@ -134,6 +162,21 @@ function main() {
   // Start DreamNET UI immediately once the script loads.
   // This does not depend on websocket connection.
   console.log("[terminal] main; starting DreamNET");
+
+  // Pre-init buffer bridge for safety (replaced during init)
+  // todo: remove if not needed
+  /*window.dreamnet = window.dreamnet || {};
+  if (!window.dreamnet.output) {
+    const pending = [];
+    window.dreamnet.output = {
+      ingest(chunk, reason) { pending.push([chunk, reason]); },
+      _drainTo(realOutput) {
+        for (const [c, r] of pending) realOutput.ingest(c, r);
+        pending.length = 0;
+      }
+    };
+  }*/
+
   initializeTerminal().catch((err) => console.error("[terminal] start FAILED", err));
 }
 
