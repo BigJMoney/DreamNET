@@ -1,6 +1,5 @@
 import {CONFIG, DEV} from "./config.js";
-import {writeAnsiSgrToRect, clearRect} from "./ansi.js";
-import {getFramebuffer, initRenderer, renderFramebuffer} from "./renderer.js";
+import {getFramebuffer, initRenderer, renderFramebuffer, applyFrameCommands} from "./renderer.js";
 import {flog} from "./log.js";
 
 /*
@@ -228,41 +227,10 @@ export class TerminalEngine {
    */
   _runOneFrame(commands) {
 
-    for (const cmd of commands) {
-      if (!cmd || typeof cmd !== "object") {
-        console.warn("[frame] invalid command (non-object)", cmd);
-        continue;
-      }
-
-      if (cmd.name === "hold") {
-        break;  // Footgun defense (shouldn't be needed but doesn't hurt)
-      }
-
-      if (cmd.name === "clearRect") {
-        const x = (cmd.rStart?.[0] ?? 0);
-        const y = (cmd.rStart?.[1] ?? 0);
-        const w = (cmd.rSize?.[0] ?? this.cols);
-        const h = (cmd.rSize?.[1] ?? this.rows);
-
-        clearRect(this._fb, x, y, w, h);
-        continue;
-      }
-
-      if (cmd.name === "drawRect") {
-        const x = (cmd.rStart?.[0] ?? 0);
-        const y = (cmd.rStart?.[1] ?? 0);
-        const w = (cmd.rSize?.[0] ?? this.cols);
-        const h = (cmd.rSize?.[1] ?? this.rows);
-        const text = String(cmd.rText ?? "<ENGINE ERROR: no rText for drawRect>");
-
-        writeAnsiSgrToRect(this._fb, text, x, y, w, h);
-        continue;
-      }
-
-      console.warn("[frame] unknown command!", cmd);
-    }
-
-    // Render exactly once per frame
-    renderFramebuffer()
+    applyFrameCommands(this._fb, commands, {
+      cols: this.cols,
+      rows: this.rows,
+    });
+    renderFramebuffer();
   }
 }

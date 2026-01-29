@@ -28,31 +28,27 @@ const CP437_UNICODE = [
 const CP437_CODEPOINTS = new Set(CP437_UNICODE);
 
 // Use a CP437-safe placeholder. '■' (U+25A0) is CP437 byte 0xFE.
-const CP437_MISSING = "■";
+export const CP437_MISSING = "■";
 
 // Flags bitfield (stored on cells, but currently only used for bold/inverse)
 export const F_BOLD = 1 << 0;
 export const F_BLINK = 1 << 2; // SGR 5/25
-const F_INVERSE = 1 << 1;
+export const F_INVERSE = 1 << 1;
 
 // 16-color defaults
 export const DEFAULT_FG = 7; // light gray / “white”
 export const DEFAULT_BG = 0; // black
 
-function clamp(n, lo, hi) {
-  return Math.max(lo, Math.min(hi, n));
-}
-
-function isCp437Char(ch) {
+export function isCp437Char(ch) {
   // (fine for BMP; non-BMP would come as surrogate halves and fail -> replaced)
   return CP437_CODEPOINTS.has(ch.codePointAt(0));
 }
 
-function normalizeNewlines(text) {
+export function normalizeNewlines(text) {
   return String(text).replace(/\r\n?/g, "\n");
 }
 
-function applySgrCodes(pen, codes) {
+export function applySgrCodes(pen, codes) {
   // Empty SGR (ESC[m) equals reset.
   if (!codes.length) codes = [0];
 
@@ -90,140 +86,168 @@ function applySgrCodes(pen, codes) {
   }
 }
 
-export function clearRect(fb, x0, y0, w, h) {
-  const cols = fb[0]?.length ?? 0;
-  const rows = fb.length;
+// -----------------------------------------------------------------------------
+// Layout helpers: ANSI -> physical rows (streaming), with sparse init-pen detection
+// -----------------------------------------------------------------------------
 
-  const rx0 = Math.max(0, Math.min(cols, x0));
-  const ry0 = Math.max(0, Math.min(rows, y0));
-  const rx1 = Math.max(0, Math.min(cols, x0 + w));
-  const ry1 = Math.max(0, Math.min(rows, y0 + h));
-
-  for (let y = ry0; y < ry1; y++) {
-    const row = fb[y];
-    for (let x = rx0; x < rx1; x++) {
-      const cell = row[x];
-      cell.ch = " ";
-      cell.fg = DEFAULT_FG;
-      cell.bg = DEFAULT_BG;
-      cell.flags = 0;
-    }
-  }
+function isDefaultPen(pen) {
+  return pen.fg === DEFAULT_FG && pen.bg === DEFAULT_BG && (pen.flags | 0) === 0;
 }
 
-// SGR-only parser and writer.
-// Writes sequentially into fb starting at (x0,y0) within a rectangle of size (w,h).
-// Newlines advance rows; overflow clamps (no scrolling yet).
-export function writeAnsiSgrToRect(fb, text, x0, y0, w, h) {
-  const cols = fb[0]?.length ?? 0;
-  const rows = fb.length;
+function clonePen(pen) {
+  return { fg: pen.fg, bg: pen.bg, flags: pen.flags | 0 };
+}
 
-  // Clip the rect to framebuffer bounds (defensive)
-  const rx0 = clamp(x0, 0, cols);
-  const ry0 = clamp(y0, 0, rows);
-  const rx1 = clamp(x0 + w, 0, cols);
-  const ry1 = clamp(y0 + h, 0, rows);
-  const rw = Math.max(0, rx1 - rx0);
-  const rh = Math.max(0, ry1 - ry0);
+/**
+ * Create a streaming layout state for appendAnsiToRows.
+ *
+ * @returns {object}
+ */
+export function createAnsiRowLayoutState() {
+  return {
+    // Current pen and cursor
+    pen: { fg: DEFAULT_FG, bg: DEFAULT_BG, flags: 0 },
+    x: 0,
 
-  let s = normalizeNewlines(text);
+    // Open row being built
+    openParts: [],
+    rowHasGlyph: false,
+    sawSgrBeforeFirstGlyph: false,
+    rowStartPen: { fg: DEFAULT_FG, bg: DEFAULT_BG, flags: 0 },
+    openRowInitPen: null, // Pen|null; decided on first glyph (or stays null)
+  };
+}
 
-  let x = 0;
-  let y = 0;
+/**
+ * Encode a pen as a single SGR sequence. (Used as a single prefix marker.)
+ * Intentionally "boring": reset + set only supported attributes.
+ *
+ * @param {{fg:number,bg:number,flags:number}} pen
+ * @returns {string}
+ */
+export function penToSgr(pen) {
+  // Always start with reset to establish a known baseline.
+  const codes = [0];
 
-  const pen = { fg: DEFAULT_FG, bg: DEFAULT_BG, flags: 0 };
+  // Bold / inverse (blink is not a "pen" requirement; keep if you want, but you
+  // likely don't want to force blink just because pen.flags has it.)
+  if (pen.flags & F_BOLD) codes.push(1);
+  if (pen.flags & F_INVERSE) codes.push(7);
 
-  // Fast path: nothing to draw
-  if (rw === 0 || rh === 0) return;
+  // fg
+  const fg = pen.fg | 0;
+  if (fg >= 0 && fg <= 7) codes.push(30 + fg);
+  else if (fg >= 8 && fg <= 15) codes.push(90 + (fg - 8));
+
+  // bg
+  const bg = pen.bg | 0;
+  if (bg >= 0 && bg <= 7) codes.push(40 + bg);
+  else if (bg >= 8 && bg <= 15) codes.push(100 + (bg - 8));
+
+  return `\x1b[${codes.join(";")}m`;
+}
+
+function finalizeOpenRow(state, outRows, outRowInitPen) {
+  outRows.push(state.openParts.join(""));
+  outRowInitPen.push(state.openRowInitPen); // may be null; that's intentional
+
+  // Start next row inheriting current pen (no replay markers added)
+  state.openParts.length = 0;
+  state.x = 0;
+  state.rowHasGlyph = false;
+  state.sawSgrBeforeFirstGlyph = false;
+  state.rowStartPen = clonePen(state.pen);
+  state.openRowInitPen = null;
+}
+
+/**
+ * Append ANSI text to a physical-row buffer (wrapped by width).
+ *
+ * IMPORTANT: This does NOT add any replay markers. It preserves the incoming
+ * SGR stream as-is and only splits into rows. It also computes sparse init-pen
+ * metadata for each completed row (Pen|null).
+ *
+ * @param {object} state - from createAnsiRowLayoutState()
+ * @param {string} text
+ * @param {number} width - rect width in columns (must be > 0)
+ * @param {string[]} outRows
+ * @param {(object|null)[]} outRowInitPen
+ */
+export function appendAnsiToRows(state, text, width, outRows, outRowInitPen) {
+  if (!state) throw new Error("[ansi] appendAnsiToRows missing state");
+  if (!Array.isArray(outRows)) throw new Error("[ansi] outRows must be array");
+  if (!Array.isArray(outRowInitPen)) throw new Error("[ansi] outRowInitPen must be array");
+
+  const w = width | 0;
+  if (w <= 0) return;
+
+  const s = normalizeNewlines(text);
+
+  // Ensure rowStartPen initialized if this is the first call
+  if (!state.rowStartPen) state.rowStartPen = clonePen(state.pen);
 
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
 
-    // Newline
+    // Newline: finalize row immediately (even if empty)
     if (ch === "\n") {
-      x = 0;
-      y++;
-      if (y >= rh) break;
+      finalizeOpenRow(state, outRows, outRowInitPen);
       continue;
     }
 
     // CSI SGR: ESC [ ... m
     if (ch === "\x1b" && s[i + 1] === "[") {
-      // Scan until 'm' or abort if too long / malformed
       let j = i + 2;
       let params = "";
       while (j < s.length) {
         const cj = s[j];
-        if (params.length > 16) {
-          console.warn("[write ANSI] Malformed CSI SGR code:", params);
-          i = j-1; // advance as cleanly as possible
-          continue;
-        }
+        if (params.length > 16) break;
         if (cj === "m") break;
-
-        // Basic guard: only accept digits/semicolons for SGR
-        // If we hit something else, treat as malformed and stop.
-        if (!((cj >= "0" && cj <= "9") || cj === ";")) {
-          break;
-        }
+        if (!((cj >= "0" && cj <= "9") || cj === ";")) break;
         params += cj;
         j++;
       }
 
       if (j < s.length && s[j] === "m") {
+        // Preserve the original sequence verbatim in the row text.
+        const seq = s.slice(i, j + 1);
+        state.openParts.push(seq);
+
+        // Mark that this row establishes pen before first glyph (if applicable)
+        if (!state.rowHasGlyph) state.sawSgrBeforeFirstGlyph = true;
+
         const codes = params.length ? params.split(";") : [];
-        applySgrCodes(pen, codes);
+        applySgrCodes(state.pen, codes);
+
         i = j; // advance past 'm'
         continue;
       }
 
-      // Malformed sequence: skip just the ESC, continue processing the rest.
+      // Malformed: preserve just ESC as-is? For now, drop it (matches prior behavior of "skip ESC").
       continue;
     }
 
-    // Ignore char if NUL or control
+    // Ignore control chars
     if (ch < " " || ch === "\x7f") continue;
 
-    // Line wrap happens after non-printables are accounted for but before writing characters
-    if (x >= rw) {
-      x = 0;
-      y++;
-      if (y >= rh) break;
+    // Wrap check happens before writing the next printable glyph (matches your writer)
+    if (state.x >= w) {
+      finalizeOpenRow(state, outRows, outRowInitPen);
     }
 
-    // Write printable char
-    if (x < rw && y < rh) {
-      const gx = rx0 + x;
-      const gy = ry0 + y;
-
-      // Write in-place to avoid allocating new objects per char.
-      // (We still compute fg/bg swap if inverse is set.)
-      let fg = pen.fg;
-      let bg = pen.bg;
-      if (pen.flags & F_INVERSE) {
-        const t = fg;
-        fg = bg;
-        bg = t;
+    // Decide init-pen for this row at the first printable glyph, if needed
+    if (!state.rowHasGlyph) {
+      const startPenIsDefault = isDefaultPen(state.rowStartPen);
+      if (!startPenIsDefault && !state.sawSgrBeforeFirstGlyph) {
+        state.openRowInitPen = clonePen(state.rowStartPen);
+      } else {
+        state.openRowInitPen = null;
       }
-
-      const cell = fb[gy][gx];
-
-      // Determine output glyph + per-cell flags
-      let outCh = ch;
-      let outFlags = pen.flags;
-
-      // Sanitize only glyphs, not ANSI/control stream
-      if (!isCp437Char(ch)) {
-        outCh = CP437_MISSING;
-        outFlags |= F_BLINK; // highlight invalid glyphs
-      }
-
-      cell.ch = outCh;
-      cell.fg = fg;
-      cell.bg = bg;
-      cell.flags = outFlags;
+      state.rowHasGlyph = true;
     }
 
-    x++;
+    // Append glyph
+    state.openParts.push(ch);
+    state.x++;
   }
 }

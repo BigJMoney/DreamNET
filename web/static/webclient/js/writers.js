@@ -1,3 +1,5 @@
+import { appendAnsiToRows, createAnsiRowLayoutState, penToSgr } from "./ansi.js";
+
 /*
 
 Writers process raw text coming from server messages and make engine Framecommands out of it, according to each writer's
@@ -60,62 +62,72 @@ export class ScrollbackWriter extends BaseWriter {
   constructor(opts = {}) {
     super(opts);
 
-    this._bufferLines = [];
-    this.maxLines = opts.maxLines ?? 2000;  // Arbitrary; can be increased if perf allows
+    // Canonical buffer is now PHYSICAL rows (post-wrap)
+    this._rows = [];
+    this._rowInitPen = [];
+
+    this.maxRows = opts.maxRows ?? 2000;
+
+    // Streaming layout state (pen + x + open row)
+    this._layoutState = createAnsiRowLayoutState();
   }
 
   /**
-   * Minimal ingest for Step 2:
-   * - normalize CRLF/CR to LF
-   * - split into lines
-   * - append to _lines
-   * - repaint whole buffer as rText joined by '\n'
+   * Processes text output from the game in a way that allows it to be stored in a scrollback buffer. Then captures a
+   * slice just the right size for one output window's worth of text, and converts it into Framecommands for the
+   * renderer to display at the right location.
+   *
    */
   makeFrameCmds(text, _meta = {}) {
-    //todo: reconsider
-    // Normalize newlines (keep it deterministic and boring for now)
-    const norm = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    text = text ?? "";
 
-    // todo: why not set _lines directly?
-    // Split into lines and append
-    const parts = norm.split("\n");
+    // Width/height from rect
+    const rectW = this.rSize?.[0] ?? this.cols;
+    const rectH = this.rSize?.[1] ?? this.rows;
 
-    // If the text ended with \n, split() will include a trailing "" line.
-    // That's OK; it represents the cursor sitting at a new blank line.
-    for (const line of parts) {
-      this._bufferLines.push(line);
-    }
-
-    // Buffer cap (drop oldest)
-    if (this.maxLines > 0 && this._bufferLines.length > this.maxLines) {
-      this._bufferLines.splice(0, this._bufferLines.length - this.maxLines);
-    }
-
-    const viewportRows = this.rSize?.[1] ?? this.rows;
-    if (viewportRows <= 0) {
-      console.error("[writer] An invalid rectangle was passed to ScrollbackWriter");
+    if ((rectW | 0) <= 0 || (rectH | 0) <= 0) {
+      console.error("[writer] invalid rectangle passed to ScrollbackWriter", { rectW, rectH, rSize: this.rSize });
       return;
     }
-    const start = Math.max(0, this._bufferLines.length - viewportRows);
-    let visibleLines = this._bufferLines.slice(start);
 
-    // Pad the terminal when output is smaller than screen size
-    const blankLines = viewportRows - visibleLines.length;
-    if (blankLines > 0) {
-      const pad = new Array(blankLines).fill("");
-      visibleLines = pad.concat(visibleLines);
+    // Append into physical row buffer (streaming, preserves ANSI codes)
+    appendAnsiToRows(this._layoutState, String(text), rectW, this._rows, this._rowInitPen);
+
+    // Cap buffers (drop oldest physical rows)
+    if (this.maxRows > 0 && this._rows.length > this.maxRows) {
+      const drop = this._rows.length - this.maxRows;
+      this._rows.splice(0, drop);
+      this._rowInitPen.splice(0, drop);
     }
-    const visibleText = visibleLines.join("\n");
+
+    // Slice bottom rectH physical rows
+    const start = Math.max(0, this._rows.length - rectH);
+    let visibleRows = this._rows.slice(start);
+
+    // Top pad with empty rows if buffer is shorter than viewport
+    const blankRows = rectH - visibleRows.length;
+    if (blankRows > 0) {
+      visibleRows = new Array(blankRows).fill("").concat(visibleRows);
+    }
+
+    // Single prefix marker (only when needed)
+    const initPen = this._rowInitPen[start] ?? null;
+    const prefix = initPen ? penToSgr(initPen) : "";
+
+    const visibleText = prefix + visibleRows.join("\n");
 
     this.dirty = true;
     this.pendingCommands = [
-        this.buildClearRect(),
-        this.buildDrawRect(visibleText)];
+      this.buildClearRect(),
+      this.buildDrawRect(visibleText),
+    ];
   }
 
-  // May be handy for debugging/tests
   clearWinAndBuffer() {
-    this._bufferLines.length = 0;
+    this._rows.length = 0;
+    this._rowInitPen.length = 0;
+    this._layoutState = createAnsiRowLayoutState();
+
     this.dirty = true;
     this.pendingCommands = [this.buildClearRect()];
   }
