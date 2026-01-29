@@ -276,6 +276,8 @@ export function renderFramebuffer() {
 /**
  * Apply one FrameCommandList to the framebuffer.
  * Renderer owns framebuffer mutation and command semantics.
+ *
+ * Renderer clips only; producers must pre-wrap with `\n`.
  */
 export function applyFrameCommands(fb, commands, defaults) {
   const cols = defaults?.cols ?? (fb[0]?.length ?? 0);
