@@ -121,7 +121,6 @@ export function clearRectFb(fb, x0, y0, w, h) {
 // SGR-only parser and writer.
 // Writes sequentially into fb starting at (x0,y0) within a rectangle of size (w,h).
 // Newlines advance rows; overflow clamps (no scrolling yet).
-// todo: There is still duplicate code here
 export function drawRectAnsiToFb(fb, text, x0, y0, w, h) {
   const cols = fb[0]?.length ?? 0;
   const rows = fb.length;
@@ -191,13 +190,6 @@ export function drawRectAnsiToFb(fb, text, x0, y0, w, h) {
 
     // Ignore char if NUL or control
     if (ch < " " || ch === "\x7f") continue;
-
-    // Line wrap happens after non-printables are accounted for but before writing characters
-    if (x >= rw) {
-      x = 0;
-      y++;
-      if (y >= rh) break;
-    }
 
     // Write printable char
     if (x < rw && y < rh) {
