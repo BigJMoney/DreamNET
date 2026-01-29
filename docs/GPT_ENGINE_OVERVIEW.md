@@ -81,15 +81,19 @@ These are non-negotiable unless this document is revised.
 
 - The engine operates exclusively on **FrameCommandList**: an ordered list of command objects.
 - Current command set (MVP):
-  - `drawRect`: rectangular write into the framebuffer using ANSI SGR handling
+  - `clearRect`: clears a rectangular region of the framebuffer to default cell values
+  - `drawRect`: draws ANSI SGR text into a rectangular region (SGR affects cell attributes)
   - `hold`: a frame-level guarantee (pacing/no-op frame). Must be the only command in the request.
-- Command-type switching exists in the engine today (MVP scope). This is expected to evolve as input/control
-  commands are introduced, and as rendering dispatch migrates further into the renderer module.
 
-**Note (DT 3.7 modularization):**
-- Framebuffer allocation and DOM surface binding live in `renderer.js`.
-- `TerminalEngine` initializes the renderer at construction time (single-instance invariant) and obtains the
-  framebuffer via `getFramebuffer()` for frame execution.
+**Critical contract (DT5 layout split):**
+- **Producers own wrapping.** Any `drawRect` payload must be pre-wrapped using explicit `\n`
+  at row boundaries for the target rect width.
+- The renderer **clips** overlong rows and **does not wrap**. `\n` is the only row-advance.
+
+**Dispatch ownership (CURRENT):**
+- The engine remains responsible for scheduling exactly one frame per request and rendering once.
+- FrameCommandList interpretation and framebuffer mutation are owned by `renderer.js` via
+  `applyFrameCommands(...)` (command semantics live in the renderer, not the engine).
 
 ### 3.2 Loop lifecycle
 - Idle → no timers, no rAF, `running=false`

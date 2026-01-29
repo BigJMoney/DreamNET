@@ -135,40 +135,78 @@ co-dependent and cannot be meaningfully validated in isolation.
 - Animation, buffering, and input gating policies are explicitly out of scope
   and handled in later dev tasks
 
-### DT 6: Input await buffer with idle-gated flush (one per idle)
+### DT 6 — Webclient input → DreamNET server → Evennia (MVP)
 
 #### Goal
-Add a client-side **input await buffer** so submitted player commands are sent to Evennia **only when the terminal 
-engine becomes idle**, storing **exactly one command per idle** and flushing afterward.
+Implement the **client-side input path** and server forwarding so a player can
+type a line in the DreamNET webclient and have it reach Evennia reliably.
+
+This task completes the “I” side of DreamNET I/O. Output correctness + layout
+were handled in DT5.
+
+#### Scope
+- Add a minimal input UI surface (single-line prompt)
+- Capture user text + submit on Enter
+- Add a DreamNET input bridge parallel to output ingest:
+  - `window.dreamnet.input.submit(line, meta?)`
+- Send submitted lines to the DreamNET server using the existing transport
+- Forward server-side to Evennia in the correct format
+- Define explicit local echo policy (no accidental duplicates)
 
 #### Behavior
-- The engine will need a new event for when it starts up, to alert input systems enter a limited input ode and begin 
-  listening for the idle event
-- The user can type normally at first.
-- When the user presses **Enter / Submit**:
-  1. The submitted line is enqueued into `pendingInput` buffer that only holds one command.
-  2. If the system is *still listening for the next `engine:idle` event* (i.e., the command cannot be flushed 
-     immediately), then the prompt becomes **locked for input** Typing will be disabled and the prompt grayed out.
-- On each `engine:idle` event:
-  - If `pendingInput` is non-empty, dequeue the command and send it.
-  - Unlock the prompt for new input
-  - Return to normal input mode (no input limit, no buffer storage)
+- User types into a prompt input.
+- Enter submits exactly one command line.
+- Submitted line is delivered to DreamNET server immediately (no idle gating).
+- Client clears the prompt after submit (unless echo policy requires otherwise).
+- Transport failures are surfaced (DEV logging is sufficient for A1).
 
 #### Notes / Constraints
-- Submit locking happens **after** a command is entered, and **only** while awaiting an idle-triggered flush 
-  (limited input mode)
-- This task is scoped to buffering + idle-based flush + submit lock only; do not couple it to animation logic.
-- Any changes needed in the engine should be limited to exposing a reliable `engine:idle` and `engine:start` signal (if 
-  not already present).
+- This task is NOT the “await buffer.” Do not idle-gate input here.
+- Keep input logic out of engine scheduling; use engine only as a consumer of
+  output frames, not as an input clock.
+- DT6 should not require Evennia ANSI output changes.
+
+---
+
+### DT 6.5 — Input await buffer with idle-gated flush (polish / optional)
+
+#### Goal
+Add a client-side **input await buffer** so submitted player commands are sent to
+Evennia only when the terminal engine becomes idle, flushing **one command per
+idle**.
+
+This is polish unless latency / sequencing issues make it necessary for usability.
+
+#### Behavior
+- On Enter/Submit:
+  - If not awaiting idle: store submitted line in `pendingInput` (size 1).
+  - Enter “limited input mode”: disable prompt typing and visually indicate lock.
+- On each `engine:idle`:
+  - If `pendingInput` is non-empty, send it and clear the buffer.
+  - Unlock the prompt and exit limited input mode.
+
+#### Notes / Constraints
+- Locking happens only while awaiting an idle-triggered flush.
+- Keep this independent of animation logic.
+- Engine changes (if any) must be limited to exposing a reliable `engine:idle`
+  signal (and `engine:start` if needed for UI state).
+
+---
 
 ### DT 7 — Runtime config fetch
 Load tunables dynamically without dirtying git.
 
+---
+
 ### DT 8 - Look into ANSI font codes
 Codes to change font family (required invariant: all fonts must be the same calculated size)
 
+---
+
 ### DT 8 — Render string-build optimization
 Replace O(n²) string concatenation with array accumulation + join.
+
+---
 
 ### DT 9 - Center the terminal in the viewport
 
