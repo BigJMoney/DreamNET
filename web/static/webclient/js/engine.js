@@ -1,5 +1,5 @@
 import {CONFIG, DEV} from "./config.js";
-import {writeAnsiSgrToRect} from "./ansi.js";
+import {writeAnsiSgrToRect, clearRect} from "./ansi.js";
 import {getFramebuffer, initRenderer, renderFramebuffer} from "./renderer.js";
 import {flog} from "./log.js";
 
@@ -27,6 +27,14 @@ Engine for the webclient that controls timing. Its main priority is currently ju
  *  Instructs the renderer to continue rendering the current framebuffer in the next frame (for animation)
  * @property {"hold"} name
  * @property {boolean=} repaint // ignored for now
+ *
+ * @typedef {Object} ClearRectCommand
+ *  Instructs the engine to clear a rect of text (usually before drawing)
+ * @property {"clearRect"} name
+ * @property {[number, number]} rStart
+ * @property {[number, number]} rSize
+ * @property {number=} fg
+ * @property {number=} bg
  *
  * Append
  *  future release
@@ -228,6 +236,16 @@ export class TerminalEngine {
 
       if (cmd.name === "hold") {
         break;  // Footgun defense (shouldn't be needed but doesn't hurt)
+      }
+
+      if (cmd.name === "clearRect") {
+        const x = (cmd.rStart?.[0] ?? 0);
+        const y = (cmd.rStart?.[1] ?? 0);
+        const w = (cmd.rSize?.[0] ?? this.cols);
+        const h = (cmd.rSize?.[1] ?? this.rows);
+
+        clearRect(this._fb, x, y, w, h);
+        continue;
       }
 
       if (cmd.name === "drawRect") {

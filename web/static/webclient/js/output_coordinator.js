@@ -10,8 +10,8 @@ Receives server output from the plugin and directs it to the appropriate writer.
 /**
  * Writer interface expected:
  * - writerId: string
- * - write(chunk: string, meta?: object): void
- * - consumePendingCommands(): (Array<object>|null)  // FrameCommandList or null
+ * - writer.makeFrameCmds(chunk: string, meta?: object): void
+ * - writer.deliverFrameCmds(): (Array<object>|null)  // FrameCommandList or null
  */
 
 /**
@@ -26,10 +26,15 @@ export function createOutputCoordinator({ engine, writer }) {
   if (!engine) throw new Error("[output_coordinator] missing engine");
   if (!writer) throw new Error("[output_coordinator] missing writer");
 
-  const writerId = String(writer.writerId ?? "main");
+  const writerId = writer.writerId ?? "<none>";
 
-  function ingest(chunk, reason = "") {
-    const text = String(chunk ?? "");
+  function ingest(text, reason = "") {
+    text = text ?? "";
+
+    //Checking at API boundary
+    if (DEV && typeof text !== "string") {
+      throw new Error(`[output] expected string, got ${typeof text}`);
+    }
 
     // --- async-branch logging (start) ---
     if (DEV) {
@@ -37,9 +42,10 @@ export function createOutputCoordinator({ engine, writer }) {
     }
 
     try {
-      writer.write(text, { reason });
+      //todo: why is this passing reason? I don't think the write uses it
+      writer.makeFrameCmds(text, { reason });
 
-      const cmds = writer.consumePendingCommands();
+      const cmds = writer.deliverFrameCmds();
       if (cmds && cmds.length) {
         engine.requestFrame(cmds, `io:${writerId}:${reason}`);
       } else {

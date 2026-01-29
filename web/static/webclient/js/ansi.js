@@ -90,6 +90,27 @@ function applySgrCodes(pen, codes) {
   }
 }
 
+export function clearRect(fb, x0, y0, w, h) {
+  const cols = fb[0]?.length ?? 0;
+  const rows = fb.length;
+
+  const rx0 = Math.max(0, Math.min(cols, x0));
+  const ry0 = Math.max(0, Math.min(rows, y0));
+  const rx1 = Math.max(0, Math.min(cols, x0 + w));
+  const ry1 = Math.max(0, Math.min(rows, y0 + h));
+
+  for (let y = ry0; y < ry1; y++) {
+    const row = fb[y];
+    for (let x = rx0; x < rx1; x++) {
+      const cell = row[x];
+      cell.ch = " ";
+      cell.fg = DEFAULT_FG;
+      cell.bg = DEFAULT_BG;
+      cell.flags = 0;
+    }
+  }
+}
+
 // SGR-only parser and writer.
 // Writes sequentially into fb starting at (x0,y0) within a rectangle of size (w,h).
 // Newlines advance rows; overflow clamps (no scrolling yet).

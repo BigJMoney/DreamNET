@@ -75,8 +75,9 @@ async function initializeTerminal() {
   const mainWriter = new ScrollbackWriter({
     writerId: "main",
     // Webclient A1: fullscreen rect, but keep it explicit for future windows
-    rStart: [0, 0],
-    rSize: [engine.cols, engine.rows],
+    //todo: add values to config
+    rStart: [5, 3],
+    rSize: [80, 40],
     cols: engine.cols,
     rows: engine.rows,
   });
